@@ -15,7 +15,7 @@ services:
     region: frankfurt
     rootDir: backend
     plan: starter            # persistent disks require a paid instance
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: npm ci --include=dev && npm run build && npm prune --omit=dev
     startCommand: npm run start:prod
     healthCheckPath: /api/ready
     disk:
