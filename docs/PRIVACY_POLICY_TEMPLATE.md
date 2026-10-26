@@ -1,6 +1,6 @@
 # Mero Kosh privacy policy
 
-**Effective date: 26 October 2026.** This policy describes the current app. Before a public launch, add the actual hosting, database, file-storage, and email providers and their processing locations below.
+**Effective date: 26 October 2026.** This policy describes the current hosted app. Review and update it whenever the providers or configuration change.
 
 Mero Kosh is operated by **Aaryan Dangal** ("we"). Contact us about privacy, support, or account requests at **[itidady@gmail.com](mailto:itidady@gmail.com)** or use the public **[/privacy](/privacy)** page.
 
@@ -20,13 +20,13 @@ Group members can see the shared group information needed to operate the group, 
 
 ## Service providers and international processing
 
-The service uses hosting, database, and file-storage providers, and may use email or Google sign-in providers when those features are configured. **Before public deployment, add the actual provider names, processing locations, and links to their privacy terms here.** Because group members may live in different countries, information may be processed outside a member's country, subject to the safeguards and terms applicable to the selected providers.
+The API, PostgreSQL database, and uploaded files are hosted by [Render](https://render.com/privacy) in Frankfurt, Germany. The website is deployed by [Vercel](https://vercel.com/legal/privacy-policy); its static site and assets are served through Vercel's global CDN, so visitors may receive them from a location near them. The browser communicates with the API hosted in Frankfurt. Render and Vercel may process service, request, and security metadata under their own privacy terms. Google sign-in and outbound email are not currently configured. Because group members may live in different countries, information may be processed outside a member's country, subject to the safeguards and terms applicable to these providers.
 
 ## Retention, account closure, and requests
 
 Account deletion is available from **Account settings**. A password account must re-enter its password; a Google-only account must complete a fresh Google confirmation. The account's login profile, phone and email on group seats, profile photos, and personal in-app notifications are removed. The group seat becomes “Former member”. If the person organizes an unfinished group, a linked co-organizer must exist; organizer access is transferred to that person as part of deletion. If you cannot use the self-service flow, contact us using the address above.
 
-Payment entries, receipts, pot decisions, disputes, and immutable group audit history remain attached to the group so its financial record stays complete. Historical audit values and uploaded proof may retain information recorded at the time, such as a prior display name, contact/payment details, an action, or information visible in a receipt. Account deletion does not erase those group records. These records are retained with the group's history and are not automatically purged when an account closes. Backups may retain deleted information until they rotate out under the configured backup retention period; add the actual retention schedule before public launch.
+Payment entries, receipts, pot decisions, disputes, and immutable group audit history remain attached to the group so its financial record stays complete. Historical audit values and uploaded proof may retain information recorded at the time, such as a prior display name, contact/payment details, an action, or information visible in a receipt. Account deletion does not erase those group records. These records are retained with the group's history and are not automatically purged when an account closes. Copies held by a provider's backups, if any, are subject to that provider's backup and retention terms; no separate backup retention schedule is currently stated here.
 
 ## Security and changes
 
