@@ -5,6 +5,7 @@ import { audit } from '../lib/audit';
 import { conflict, forbidden, notFound, unprocessable } from '../lib/errors';
 import { now } from '../lib/clock';
 import { generateInviteCode } from '../lib/inviteCode';
+import { hashPassword, verifyPassword } from '../lib/auth';
 import { buildRules } from '../domain/rules';
 import { calculateExitQuote, looksLikeCardNumber } from '../domain/calculations';
 import { distributeEvenlyFor } from '../domain/money';
@@ -38,6 +39,8 @@ export interface GroupInput {
   earlyExitPenaltyBp: number;
 }
 
+export interface CreateGroupInput extends GroupInput { joinPassword: string }
+
 /** Fields that change the financial rules: editing them un-confirms the rules. */
 const RULE_FIELDS: (keyof GroupInput)[] = [
   'currency', 'contributionAmount', 'memberCount', 'startDate', 'frequency', 'collectionDueDay', 'selectionMethod',
@@ -62,25 +65,123 @@ function guardIdentifier(id?: string | null) {
 
 async function uniqueInviteCode(): Promise<string> {
   for (let i = 0; i < 10; i++) {
-    const code = generateInviteCode();
+    const code = generateInviteCode(4);
     if (!(await prisma.group.findUnique({ where: { inviteCode: code } }))) return code;
   }
   throw new Error('Could not generate a unique invite code');
 }
 
-export async function createGroup(input: GroupInput, organizer: { userId: string; fullName: string; email: string | null; phone: string | null; participates: boolean }, actor: Actor) {
+export async function createGroup(input: CreateGroupInput, organizer: { userId: string; fullName: string; email: string | null; phone: string | null; participates: boolean }, actor: Actor) {
   const inviteCode = await uniqueInviteCode();
+  const { joinPassword, ...groupInput } = input;
+  const joinPasswordHash = await hashPassword(joinPassword);
   return prisma.$transaction(async (tx) => {
-    const group = await tx.group.create({ data: { ...input, inviteCode, createdById: organizer.userId } });
+    const group = await tx.group.create({ data: { ...groupInput, inviteCode, joinPasswordHash, createdById: organizer.userId } });
     const member = await tx.groupMember.create({
       data: {
         groupId: group.id, userId: organizer.userId, fullName: organizer.fullName, email: organizer.email, phone: organizer.phone,
         role: 'ORGANIZER', isContributor: organizer.participates,
       },
     });
-    await audit(tx, { groupId: group.id, userId: actor.userId, action: 'GROUP_CREATED', entityType: 'Group', entityId: group.id, newValue: input, ipAddress: actor.ip });
+    await audit(tx, { groupId: group.id, userId: actor.userId, action: 'GROUP_CREATED', entityType: 'Group', entityId: group.id, newValue: { ...groupInput, joinCode: inviteCode }, ipAddress: actor.ip });
     await audit(tx, { groupId: group.id, userId: actor.userId, action: 'MEMBER_ADDED', entityType: 'GroupMember', entityId: member.id, newValue: { fullName: member.fullName, role: 'ORGANIZER', isContributor: member.isContributor }, ipAddress: actor.ip });
     return group;
+  }, TX_OPTS);
+}
+
+export async function changeGroupJoinPassword(group: Group, password: string, actor: Actor) {
+  const joinPasswordHash = await hashPassword(password);
+  const inviteCode = await uniqueInviteCode();
+  const updated = await prisma.group.update({ where: { id: group.id }, data: { joinPasswordHash, inviteCode } });
+  await audit(prisma, {
+    groupId: group.id, userId: actor.userId, action: 'GROUP_JOIN_PASSWORD_CHANGED', entityType: 'Group', entityId: group.id,
+    oldValue: { joinCode: group.inviteCode }, newValue: { passwordChanged: true, joinCode: inviteCode }, ipAddress: actor.ip,
+  });
+  return updated;
+}
+
+export async function requestGroupJoin(code: string, password: string, user: { id: string; fullName: string; email: string | null; phone: string | null }, actor: Actor) {
+  const group = await prisma.group.findFirst({ where: { inviteCode: code, deletedAt: null } });
+  const passwordHash = group?.joinPasswordHash ?? '$2b$12$Na0VkQS4Y0J1qELVwCmQ6u8Xi3wUCFJYSJnQGydQuiEbN.M95aGa.';
+  const passwordMatches = await verifyPassword(password, passwordHash).catch(() => false);
+  if (!group || !group.joinPasswordHash || !passwordMatches) throw forbidden('That group code or password is incorrect');
+  if (group.status !== 'DRAFT') throw conflict('This group has already started and is no longer accepting new contributing members');
+  if (!user.phone) throw unprocessable('Add a phone number to your account before requesting to join');
+
+  return prisma.$transaction(async (tx) => {
+    const existingMember = await tx.groupMember.findFirst({ where: { groupId: group.id, userId: user.id } });
+    if (existingMember) return { status: 'APPROVED' as const, groupId: group.id };
+
+    const prior = await tx.groupJoinRequest.findUnique({ where: { groupId_userId: { groupId: group.id, userId: user.id } } });
+    if (prior?.status === 'PENDING') return { status: 'PENDING' as const };
+    if (prior?.status === 'APPROVED') return { status: 'APPROVED' as const, groupId: group.id };
+
+    const matchingSeat = await tx.groupMember.findFirst({ where: { groupId: group.id, userId: null, phone: user.phone, isContributor: true, status: { not: 'EXITED' } } });
+    const seats = await tx.groupMember.count({ where: { groupId: group.id, isContributor: true, status: { not: 'EXITED' } } });
+    if (!matchingSeat && seats >= group.memberCount) throw conflict('This group has no open member seats');
+    const request = prior
+      ? await tx.groupJoinRequest.update({ where: { id: prior.id }, data: { status: 'PENDING' } })
+      : await tx.groupJoinRequest.create({ data: { groupId: group.id, userId: user.id } });
+    const organizers = await tx.groupMember.findMany({ where: { groupId: group.id, role: { in: ['ORGANIZER', 'CO_ORGANIZER'] }, userId: { not: null } }, select: { userId: true } });
+    for (const organizer of organizers) {
+      if (!organizer.userId) continue;
+      await tx.notification.create({
+        data: { groupId: group.id, userId: organizer.userId, type: 'GENERAL', title: 'New request to join', body: `${user.fullName} asked to join. Review the request in the group’s Members page.` },
+      });
+    }
+    await audit(tx, {
+      groupId: group.id, userId: user.id, action: 'GROUP_JOIN_REQUESTED', entityType: 'GroupJoinRequest', entityId: request.id,
+      newValue: { status: 'PENDING' }, ipAddress: actor.ip,
+    });
+    return { status: 'PENDING' as const };
+  }, TX_OPTS);
+}
+
+export async function listGroupJoinRequests(groupId: string) {
+  return prisma.groupJoinRequest.findMany({
+    where: { groupId, status: 'PENDING' },
+    include: { user: { select: { fullName: true, phone: true, email: true } } },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+export async function reviewGroupJoinRequest(group: Group, requestId: string, approve: boolean, actor: Actor) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "groups" WHERE "id" = ${group.id} FOR UPDATE`;
+    const request = await tx.groupJoinRequest.findFirst({ where: { id: requestId, groupId: group.id, status: 'PENDING' }, include: { user: true } });
+    if (!request) throw notFound('Join request');
+    if (approve) {
+      const currentGroup = await tx.group.findUniqueOrThrow({ where: { id: group.id } });
+      if (currentGroup.status !== 'DRAFT') throw conflict('New contributing members cannot be approved after the group starts');
+      if (!request.user.phone) throw unprocessable('This account needs a phone number before it can join');
+      const matchingSeat = await tx.groupMember.findFirst({ where: { groupId: group.id, userId: null, phone: request.user.phone, isContributor: true, status: { not: 'EXITED' } } });
+      if (matchingSeat) {
+        await tx.groupMember.update({ where: { id: matchingSeat.id }, data: { userId: request.userId } });
+      } else {
+        const seats = await tx.groupMember.count({ where: { groupId: group.id, isContributor: true, status: { not: 'EXITED' } } });
+        if (seats >= currentGroup.memberCount) throw conflict('All member seats are filled');
+        await tx.groupMember.create({
+          data: {
+            groupId: group.id, userId: request.userId, fullName: request.user.fullName, phone: request.user.phone,
+            email: request.user.email, role: 'MEMBER', isContributor: true,
+          },
+        });
+      }
+    }
+    const status = approve ? 'APPROVED' : 'REJECTED';
+    const reviewed = await tx.groupJoinRequest.update({ where: { id: request.id }, data: { status } });
+    await audit(tx, {
+      groupId: group.id, userId: actor.userId, action: 'GROUP_JOIN_REQUEST_REVIEWED', entityType: 'GroupJoinRequest', entityId: request.id,
+      oldValue: { status: 'PENDING' }, newValue: { status, applicantUserId: request.userId }, ipAddress: actor.ip,
+    });
+    await tx.notification.create({
+      data: {
+        groupId: group.id, userId: request.userId, type: 'GENERAL',
+        title: approve ? 'Join request approved' : 'Join request declined',
+        body: approve ? `You are now a member of ${group.name}.` : `Your request to join ${group.name} was declined.`,
+      },
+    });
+    return reviewed;
   }, TX_OPTS);
 }
 

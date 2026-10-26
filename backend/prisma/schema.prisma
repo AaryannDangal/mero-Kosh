@@ -66,6 +66,12 @@ enum GroupStatus {
   COMPLETED
 }
 
+enum GroupJoinRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum RoundStatus {
   UPCOMING
   COLLECTING
@@ -159,6 +165,7 @@ model User {
   createdAt                 DateTime       @default(now())
   updatedAt                 DateTime       @updatedAt
   memberships               GroupMember[]
+  groupJoinRequests         GroupJoinRequest[]
   notifications             Notification[]
   authTokens                AuthToken[]
 
@@ -202,6 +209,7 @@ model Group {
   earlyExitRules     String?
   earlyExitPenaltyBp Int             @default(0) // basis points withheld from refunds on early exit
   inviteCode         String          @unique
+  joinPasswordHash   String?
   status             GroupStatus     @default(DRAFT)
   rulesConfirmedAt   DateTime?
   rulesConfirmedById String?
@@ -219,6 +227,7 @@ model Group {
   notifications Notification[]
   exits         MemberExit[]
   invitations   GroupInvitation[]
+  joinRequests  GroupJoinRequest[]
 
   @@map("groups")
 }
@@ -278,6 +287,21 @@ model GroupInvitation {
 
   @@index([groupId, memberId, expiresAt])
   @@map("group_invitations")
+}
+
+model GroupJoinRequest {
+  id        String                 @id @default(cuid())
+  groupId   String
+  userId    String
+  status    GroupJoinRequestStatus @default(PENDING)
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+  group     Group                  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([groupId, status, createdAt])
+  @@map("group_join_requests")
 }
 
 model Round {

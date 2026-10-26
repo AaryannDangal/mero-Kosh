@@ -30,7 +30,7 @@ User guide (EN + NE): [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md)
 |---|---|
 | **Groups** | Name, currency (NPR default), contribution, member count, start date, monthly / biweekly / weekly frequency, due day, fixed rotation, admin selection by visible member requests, or bidding, late fee (none / fixed / percentage / daily, optional cap) + grace period, "keep contributing after receiving the pot", missed-payment and early-exit rules, early-exit penalty. Rules are generated in **English and Nepali** from the configuration and the organizer **must confirm them before round 1**. |
 | **Roles** | Organizer (full control, can delete the group) · Co-organizer (everything except deleting) · Member (own data, upload proof, bid, dispute, shared ledger) · Viewer (read-only ledger/reports). |
-| **Members** | Name, international phone (stored in E.164), optional email, payment method + identifier (eSewa/Khalti ID or masked account — card numbers are rejected), optional photo, join date, role, status (active, waiting, received pot, exited, suspended, defaulted). Organizers issue single-use, 14-day invitations to specific member seats. Early-exit quote: amount owed by/to the member, settlement by payment, approved replacement or refund at cycle end. |
+| **Members** | Name, international phone (stored in E.164), optional email, payment method + identifier (eSewa/Khalti ID or masked account — card numbers are rejected), optional photo, join date, role, status (active, waiting, received pot, exited, suspended, defaulted). Organizers can share a short group code plus a password they set; each join request needs organizer approval and links to a matching pre-added phone seat or an open seat. Single-use, 14-day personal invitations remain available. Early-exit quote: amount owed by/to the member, settlement by payment, approved replacement or refund at cycle end. |
 | **Rounds** | Number, period, due date, full pot, recipient, bid discount, payout, discount share, expected/actual collection, late fees, opening/closing balance, reconciliation status. Statuses: upcoming → collecting → payout pending → completed (or disputed). |
 | **Fixed rotation** | Recipient = next waiting member by rotation order; receives the full pot. |
 | **Admin selection** | Eligible members can request an open round's pot; the request list is visible to the group, and only the organizer or co-organizer selects the recipient. A request is not a promise of selection. |
@@ -103,6 +103,8 @@ npm run dev                      # http://localhost:5173  (proxies /api → :400
 ## Seed data & demo logins
 
 `npm run seed` creates **"Kathmandu Saathi Dhukuti"**: bidding, NPR 10,000 × 5 members, monthly on the 10th, starting 2026-08-01, fixed late fee NPR 500 after 3 grace days, minimum bid NPR 1,000, 5 % early-exit penalty. History is replayed through the real services:
+
+The demo group join password is `DemoDhukutiJoin2026!`; the organizer can see the short group code on the Members page.
 
 * Round 1 – Gita wins with a NPR 4,000 discount, paid out via Khalti, closed balanced.
 * Round 2 – Hari wins (NPR 3,500); Maya pays late + NPR 500 late fee; Maya's dispute was dismissed; closed.
@@ -186,10 +188,13 @@ Role legend: **O** organizer, **C** co-organizer, **M** member, **V** viewer. `G
 | Method & path | Roles | Notes |
 |---|---|---|
 | `GET /groups` | any | my groups with `myRole`, `myMemberId`, `myStatus` |
-| `POST /groups` | any | create (caller becomes organizer). Body: `name, description?, currency="NPR", contributionAmount, memberCount, startDate, frequency: MONTHLY\|BIWEEKLY\|WEEKLY, collectionDueDay (1–28 monthly, 0–6 weekday otherwise), selectionMethod: FIXED_ROTATION\|BIDDING, lateFeeType: NONE\|FIXED\|PERCENTAGE\|DAILY, lateFeeValue (paisa, or bp for PERCENTAGE), lateFeeCap?, gracePeriodDays, continueAfterPot, minBidDiscount, bidWinRule="HIGHEST_DISCOUNT", tieBreakRule: EARLIEST\|RANDOM, missedPaymentRules?, earlyExitRules?, earlyExitPenaltyBp, organizerParticipates=true` |
+| `POST /groups` | any | create (caller becomes organizer). Body: `name, description?, currency="NPR", contributionAmount, memberCount, startDate, frequency: MONTHLY\|BIWEEKLY\|WEEKLY, collectionDueDay (1–28 monthly, 0–6 weekday otherwise), selectionMethod: FIXED_ROTATION\|BIDDING, lateFeeType: NONE\|FIXED\|PERCENTAGE\|DAILY, lateFeeValue (paisa, or bp for PERCENTAGE), lateFeeCap?, gracePeriodDays, continueAfterPot, minBidDiscount, bidWinRule="HIGHEST_DISCOUNT", tieBreakRule: EARLIEST\|RANDOM, missedPaymentRules?, earlyExitRules?, earlyExitPenaltyBp, organizerParticipates=true, joinPassword (12+ chars)`; returns the short group code to the organizer |
+| `POST /groups/join` | authenticated | `{code, password}`; creates a pending request for a DRAFT group. Manager approval is required before membership. |
 | `GET /invitations/:token` | public | safe group/member preview; token is high-entropy and stored hashed |
 | `POST /invitations/:token/accept` | authenticated | accepts a single-use invitation for one pre-added member seat |
 | `GET G` | O C M V | group, `myRole`, `rules {en[], ne[]}`; contact matches alone never link an account |
+| `POST G/join-password` | O C | `{password}`; set or rotate the shared group password (12+ chars) |
+| `GET G/join-requests` · `POST G/join-requests/:id/approve` · `POST G/join-requests/:id/reject` | O C | review join requests; approval links a matching unclaimed phone seat or creates a member in an open seat |
 | `PATCH G` | O C | partial update; financial fields only while DRAFT (changing them resets rule confirmation) |
 | `DELETE G` | O | `{reason}` – soft delete |
 | `GET G/rules` | all | `{rules, confirmedAt}` |

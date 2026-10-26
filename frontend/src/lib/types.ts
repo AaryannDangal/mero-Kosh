@@ -14,6 +14,7 @@ export interface Group {
   continueAfterPot: boolean; minBidDiscount: number; bidWinRule: 'HIGHEST_DISCOUNT' | 'LOWEST_DISCOUNT'; tieBreakRule: 'EARLIEST' | 'RANDOM';
   missedPaymentRules: string | null; earlyExitRules: string | null; earlyExitPenaltyBp: number;
   status: GroupStatus; rulesConfirmedAt: string | null; createdAt: string;
+  joinCode?: string; hasJoinPassword?: boolean;
 }
 
 export interface Member {

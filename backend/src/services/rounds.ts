@@ -43,6 +43,8 @@ export async function startGroup(groupId: string, actor: Actor) {
     await lockGroup(tx, groupId);
     const group = await tx.group.findUniqueOrThrow({ where: { id: groupId } });
     if (group.status !== 'DRAFT') throw conflict('Group has already started');
+    const pendingJoinRequests = await tx.groupJoinRequest.count({ where: { groupId, status: 'PENDING' } });
+    if (pendingJoinRequests) throw unprocessable('Review or decline all group join requests before starting the first round');
     if (!group.rulesConfirmedAt) throw unprocessable('The organizer must confirm the group rules before the first round starts');
     const contributors = await tx.groupMember.findMany({
       where: { groupId, isContributor: true, status: { not: 'EXITED' } },

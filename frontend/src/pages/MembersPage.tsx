@@ -43,9 +43,10 @@ const detailsPayload = (v: Details, opts: { role: boolean; rotation: boolean }) 
 });
 
 export function MembersPage() {
-  const { group, isManager, myMemberId, myRole } = useGroup();
+  const { group, isManager, myMemberId, myRole, reloadGroup } = useGroup();
   const { t } = useI18n();
   const { data, reload } = useApi<{ members: Member[] }>(`/groups/${group.id}/members`);
+  const joinRequests = useApi<{ requests: { id: string; user: { fullName: string; phone: string | null; email: string | null }; createdAt: string }[] }>(isManager ? `/groups/${group.id}/join-requests` : null);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
   const [statusFor, setStatusFor] = useState<Member | null>(null);
@@ -53,13 +54,76 @@ export function MembersPage() {
   const [inviteFor, setInviteFor] = useState<Member | null>(null);
   const [inviteUrl, setInviteUrl] = useState('');
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [joinPassword, setJoinPassword] = useState('');
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [passwordSaved, setPasswordSaved] = useState(false);
   const invite = useAction();
+  const access = useAction();
+  const review = useAction();
   const draft = group.status === 'DRAFT';
   if (!data) return <Spinner />;
   const seats = data.members.filter((m) => m.isContributor && m.status !== 'EXITED').length;
   return (
     <div className="space-y-4">
       {isManager && <Alert tone="blue">{t('inviteOnlyDescription')}</Alert>}
+
+      {isManager && draft && <section className="card space-y-3">
+        <h2 className="text-lg font-bold">{t('groupCodeAndPassword')}</h2>
+        <p className="text-sm text-stone-600">{t('joinCodeShareHint')}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <code className="rounded-lg bg-stone-100 px-3 py-2 text-base font-semibold tracking-wide">{group.joinCode ?? '—'}</code>
+          {group.joinCode && <button className="btn-secondary btn-sm" onClick={async () => {
+            try { await navigator.clipboard.writeText(group.joinCode!); setCodeCopied(true); } catch { setCodeCopied(false); }
+          }}>{codeCopied ? t('groupCodeCopied') : t('copyGroupCode')}</button>}
+        </div>
+        <form className="flex flex-col gap-2 sm:flex-row sm:items-end" onSubmit={(e) => {
+          e.preventDefault();
+          setPasswordSaved(false);
+          void access.run(async () => {
+            await api.post(`/groups/${group.id}/join-password`, { password: joinPassword });
+            setJoinPassword('');
+            setPasswordSaved(true);
+            await reloadGroup();
+          });
+        }}>
+          <Field label={group.hasJoinPassword ? t('changeGroupPassword') : t('setGroupPassword')} hint={t('groupJoinPasswordHint')} className="flex-1">
+            <input className="input" type={showAdminPassword ? 'text' : 'password'} autoComplete="new-password" minLength={12} maxLength={128} required value={joinPassword} onChange={(e) => setJoinPassword(e.target.value)} />
+          </Field>
+          <label className="flex min-h-11 items-center gap-2 text-sm text-stone-700">
+            <input type="checkbox" checked={showAdminPassword} onChange={(e) => setShowAdminPassword(e.target.checked)} />
+            {t('showPassword')}
+          </label>
+          <button className="btn-secondary" disabled={access.busy || joinPassword.length < 12}>{group.hasJoinPassword ? t('changeGroupPassword') : t('setGroupPassword')}</button>
+        </form>
+        {passwordSaved && <p role="status" className="text-sm text-green-700">{t('groupPasswordUpdated')}</p>}
+        <ErrorText error={access.error} />
+      </section>}
+
+      {isManager && draft && !!joinRequests.data?.requests.length && <Section title={`${t('pendingJoinRequests')} (${joinRequests.data.requests.length})`}>
+        <ul className="divide-y divide-stone-100">
+          {joinRequests.data.requests.map((request) => <li key={request.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">{request.user.fullName}</p>
+              <p className="text-sm text-stone-600">{request.user.phone ?? t('phoneRequired')}{request.user.email ? ` · ${request.user.email}` : ''}</p>
+            </div>
+            <div className="flex gap-2">
+              <button className="btn-primary btn-sm" disabled={review.busy} onClick={() => void review.run(async () => {
+                await api.post(`/groups/${group.id}/join-requests/${request.id}/approve`, {});
+                await Promise.all([joinRequests.reload(), reload()]);
+              })}>{t('approve')}</button>
+              <button className="btn-secondary btn-sm" disabled={review.busy} onClick={() => void review.run(async () => {
+                await api.post(`/groups/${group.id}/join-requests/${request.id}/reject`, {});
+                await joinRequests.reload();
+              })}>{t('declineJoinRequest')}</button>
+            </div>
+          </li>)}
+        </ul>
+        <ErrorText error={review.error} />
+      </Section>}
+      {isManager && draft && joinRequests.data && joinRequests.data.requests.length === 0 && <p className="text-sm text-stone-500">{t('noJoinRequests')}</p>}
+      {isManager && draft && joinRequests.error && <ErrorText error={joinRequests.error.message} />}
+      {isManager && !draft && <Alert tone="blue">{t('groupJoinClosed')}</Alert>}
 
       <Section title={`${t('members')} (${num(seats)}/${num(group.memberCount)})`} action={isManager && <button className="btn-primary btn-sm" onClick={() => setAdding(true)}>+ {t('addMember')}</button>}>
         <ul className="divide-y divide-stone-100">

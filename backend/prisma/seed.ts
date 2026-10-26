@@ -81,6 +81,7 @@ async function main() {
     missedPaymentRules: 'Two missed payments in a row: the member is marked defaulted and the group meets to decide next steps.',
     earlyExitRules: 'Early exit needs one month notice. A replacement must be approved by all members.',
     earlyExitPenaltyBp: 500,
+    joinPassword: 'DemoDhukutiJoin2026!',
   }, { userId: uSita.id, fullName: uSita.fullName, email: uSita.email, phone: uSita.phone, participates: true }, actor);
 
   const add = (fullName: string, email: string, phone: string, paymentMethod: 'ESEWA' | 'KHALTI' | 'BANK_TRANSFER' | 'CASH', paymentIdentifier: string | null, role: 'MEMBER' | 'CO_ORGANIZER' | 'VIEWER' = 'MEMBER', bankName?: string) =>

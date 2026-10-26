@@ -20,6 +20,7 @@ import { AuditPage } from './pages/AuditPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { PrivacyPage } from './pages/PrivacyPage';
+import { JoinGroupPage } from './pages/JoinGroupPage';
 
 function Protected({ children }: { children: ReactNode }) {
   const { user, ready } = useAuth();
@@ -42,6 +43,7 @@ export default function App() {
       <Route element={<Protected><AppLayout /></Protected>}>
         <Route path="/" element={<GroupsPage />} />
         <Route path="/groups/new" element={<CreateGroupPage />} />
+        <Route path="/groups/join" element={<JoinGroupPage />} />
         <Route path="/account" element={<AccountSettingsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/groups/:groupId" element={<GroupLayout />}>

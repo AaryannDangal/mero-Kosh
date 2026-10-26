@@ -104,8 +104,16 @@ function groupRefine<T extends z.ZodTypeAny>(schema: T) {
   });
 }
 
-export const createGroupSchema = groupRefine(groupBase.extend({ organizerParticipates: boolish.default(true) }));
+export const createGroupSchema = groupRefine(groupBase.extend({
+  organizerParticipates: boolish.default(true),
+  joinPassword: z.string().min(12, 'Group password must be at least 12 characters').max(128),
+}));
 export const updateGroupSchema = groupRefine(groupBase.partial());
+export const groupJoinSchema = z.object({
+  code: trimmed(16).min(4).max(16).transform((value) => value.toUpperCase().replace(/\s+/g, '')),
+  password: z.string().min(1).max(128),
+});
+export const groupJoinPasswordSchema = z.object({ password: z.string().min(12, 'Group password must be at least 12 characters').max(128) });
 export const deleteGroupSchema = z.object({ reason: trimmed(500).min(3) });
 // ---------------------------------------------------------------------------
 export const memberDetailsSchema = z.object({

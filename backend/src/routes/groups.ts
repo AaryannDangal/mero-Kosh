@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma';
 import { asyncHandler } from '../middleware/error';
 import { validate } from '../middleware/validate';
 import { isManager, loadGroup, requireAuth, requireRole } from '../middleware/auth';
-import { uploadLimiter } from '../middleware/rateLimit';
+import { loginLimiter, uploadLimiter } from '../middleware/rateLimit';
 import { fileKeyOf, singleUpload } from '../middleware/upload';
 import { forbidden, notFound, unprocessable } from '../lib/errors';
 import { now } from '../lib/clock';
@@ -20,6 +20,7 @@ import { serializeMember } from './serializers';
 import {
   addMemberSchema, createGroupSchema, deleteGroupSchema, exitSchema, memberStatusSchema, reasonSchema,
   updateGroupSchema, updateMemberSchema,
+  groupJoinSchema, groupJoinPasswordSchema,
 } from './schemas';
 
 export const groupsRouter = Router();
@@ -30,8 +31,8 @@ export { actorOf };
 const MANAGER = requireRole('ORGANIZER', 'CO_ORGANIZER');
 
 function serializeGroup(g: NonNullable<Request['group']>, _manager = false) {
-  const { inviteCode: _legacyInviteCode, deletedAt: _d, ...rest } = g;
-  return rest;
+  const { inviteCode, joinPasswordHash, deletedAt: _d, ...rest } = g;
+  return { ...rest, ...( _manager ? { joinCode: inviteCode, hasJoinPassword: !!joinPasswordHash } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -58,7 +59,12 @@ groupsRouter.post('/', validate(createGroupSchema), asyncHandler(async (req, res
   const user = await prisma.user.findUniqueOrThrow({ where: { id: req.user!.id } });
   if (!user.phone) throw unprocessable('Add a phone number to your account before creating a group');
   const group = await groups.createGroup(input, { userId: user.id, fullName: user.fullName, email: user.email, phone: user.phone, participates: organizerParticipates }, actorOf(req));
-  res.status(201).json({ group: serializeGroup(group), rules: groups.rulesFor(group) });
+  res.status(201).json({ group: serializeGroup(group, true), rules: groups.rulesFor(group) });
+}));
+
+groupsRouter.post('/join', loginLimiter, validate(groupJoinSchema), asyncHandler(async (req, res) => {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: req.user!.id }, select: { id: true, fullName: true, email: true, phone: true } });
+  res.status(201).json(await groups.requestGroupJoin(req.body.code, req.body.password, user, actorOf(req)));
 }));
 
 const g = Router({ mergeParams: true });
@@ -71,7 +77,27 @@ g.get('/', asyncHandler(async (req, res) => {
 
 g.patch('/', MANAGER, validate(updateGroupSchema), asyncHandler(async (req, res) => {
   const group = await groups.updateGroup(req.group!, req.body, actorOf(req));
-  res.json({ group: serializeGroup(group), rules: groups.rulesFor(group) });
+  res.json({ group: serializeGroup(group, true), rules: groups.rulesFor(group) });
+}));
+
+g.post('/join-password', MANAGER, validate(groupJoinPasswordSchema), asyncHandler(async (req, res) => {
+  const group = await groups.changeGroupJoinPassword(req.group!, req.body.password, actorOf(req));
+  res.json({ group: serializeGroup(group, true) });
+}));
+
+g.get('/join-requests', MANAGER, asyncHandler(async (req, res) => {
+  const requests = await groups.listGroupJoinRequests(req.group!.id);
+  res.json({ requests });
+}));
+
+g.post('/join-requests/:requestId/approve', MANAGER, asyncHandler(async (req, res) => {
+  await groups.reviewGroupJoinRequest(req.group!, req.params.requestId, true, actorOf(req));
+  res.json({ ok: true });
+}));
+
+g.post('/join-requests/:requestId/reject', MANAGER, asyncHandler(async (req, res) => {
+  await groups.reviewGroupJoinRequest(req.group!, req.params.requestId, false, actorOf(req));
+  res.json({ ok: true });
 }));
 
 g.delete('/', requireRole('ORGANIZER'), validate(deleteGroupSchema), asyncHandler(async (req, res) => {

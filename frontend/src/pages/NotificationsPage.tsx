@@ -17,7 +17,7 @@ export function NotificationsPage() {
         <ul className="divide-y divide-stone-100">
           {data.notifications.map((n) => (
             <li key={n.id} className={`py-3 ${n.readAt ? 'opacity-70' : ''}`}>
-              <Link to={n.roundId ? `/groups/${n.groupId}/rounds/${n.roundId}` : `/groups/${n.groupId}`} onClick={() => !n.readAt && api.post(`/notifications/${n.id}/read`).then(changed)} className="block">
+              <Link to={n.roundId ? `/groups/${n.groupId}/rounds/${n.roundId}` : n.title === 'New request to join' ? `/groups/${n.groupId}/members` : n.title === 'Join request declined' ? '/' : `/groups/${n.groupId}`} onClick={() => !n.readAt && api.post(`/notifications/${n.id}/read`).then(changed)} className="block">
                 <div className="flex items-start gap-2">
                   {!n.readAt && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-500" />}
                   <div className="min-w-0">

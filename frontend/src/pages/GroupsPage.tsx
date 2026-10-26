@@ -14,7 +14,10 @@ export function GroupsPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">{t('myGroups')}</h1>
-        <Link to="/groups/new" className="btn-primary">+ {t('createGroup')}</Link>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/groups/join" className="btn-secondary">{t('joinExistingGroup')}</Link>
+          <Link to="/groups/new" className="btn-primary">+ {t('createGroup')}</Link>
+        </div>
       </div>
       <Alert tone="blue">{t('inviteOnlyDescription')}</Alert>
       {loading ? <Spinner /> : !data?.groups.length ? <Empty>{t('noGroups')}</Empty> : (

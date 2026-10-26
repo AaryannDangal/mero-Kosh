@@ -10,12 +10,12 @@
 
 ### 1. Getting started
 1. Open the app and **Create account** with an international phone number (include its country code, such as `+977` or `+1`) and password. Email is optional; you can log in with either phone or email. Google sign-in is available when configured. Switch language at any time with **EN / नेपाली** at the top.
-2. To join an existing group, open the **personal invitation link** from your organizer, create or log in to your account, then explicitly accept the invitation. A phone or email match alone never grants group access.
+2. To join by group code, create or log in to your account, open **Join a group**, then enter the short code and password shared by the organizer. Your request stays pending until the organizer approves it. The organizer can still send you a personal invitation link instead.
 
 ### 2. For organizers: set up a group
-1. **Create group**: enter the contribution, number of members, start date, frequency (monthly / every two weeks / weekly), due day, and choose **Fixed rotation**, **Member requests / organizer decides**, or **Bidding**. In request groups, eligible members can ask for a round's pot and the organizer chooses the recipient.
+1. **Create group**: enter the contribution, number of members, start date, frequency (monthly / every two weeks / weekly), due day, choose a group password of at least 12 characters, and choose **Fixed rotation**, **Member requests / organizer decides**, or **Bidding**. The app assigns a short group code. In request groups, eligible members can ask for a round's pot and the organizer chooses the recipient.
 2. Set the **late fee** (fixed, percentage or per day), the **grace period**, and rules for missed payments and early exit.
-3. **Members** tab: add each invited person as a member, then create a personal invitation link for that seat and share it privately. Each link works once and expires in 14 days. In fixed rotation, set each member's **rotation order**. Do not store card numbers; use an eSewa/Khalti ID or a masked bank account such as `****1234`.
+3. **Members** tab: share the group code and password privately with trusted people. Review and approve each join request here; if you already added a member seat with their phone number, approval links their account to that seat. Otherwise, an open seat is created for them. You can also add a seat and issue a personal invitation link; each personal link works once and expires in 14 days. In fixed rotation, set each member's **rotation order**. Do not store card numbers; use an eSewa/Khalti ID or a masked bank account such as `****1234`.
 4. **Rules** tab: read the rules in English and Nepali, share them with everyone, then **Confirm**. After that, **Start first round**.
 
 ### 3. Every round
