@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+backend/uploads/
+*.tsbuildinfo
+*.log
+.DS_Store
+*.sqlite
+*.sqlite3
+*.dump
+*.backup
+*.pem
+*.key
