@@ -65,7 +65,7 @@ export function toPayload(v: GroupFormValues, includeOrganizer: boolean) {
     missedPaymentRules: v.missedPaymentRules.trim() || null,
     earlyExitRules: v.earlyExitRules.trim() || null,
     earlyExitPenaltyBp: Math.round(Number(v.exitPenaltyPct || 0) * 100),
-    ...(includeOrganizer ? { joinPassword: v.joinPassword } : {}),
+    ...(includeOrganizer && v.joinPassword ? { joinPassword: v.joinPassword } : {}),
     ...(includeOrganizer ? { organizerParticipates: v.organizerParticipates } : {}),
   };
 }
@@ -75,7 +75,6 @@ export function GroupForm({ initial, onSubmit, submitLabel, busy, error, isCreat
 }) {
   const { t, lang } = useI18n();
   const [v, setV] = useState(initial);
-  const [showJoinPassword, setShowJoinPassword] = useState(false);
   const set = <K extends keyof GroupFormValues>(k: K, val: GroupFormValues[K]) => setV((p) => ({ ...p, [k]: val }));
   const inp = (k: keyof GroupFormValues) => ({ value: v[k] as string, onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => set(k, e.target.value as never), disabled: locked });
   const pot = toPaisa(v.contribution || '0') * Number(v.memberCount || 0);
@@ -127,16 +126,6 @@ export function GroupForm({ initial, onSubmit, submitLabel, busy, error, isCreat
         </div>
       </fieldset>
 
-      {isCreate && <fieldset className="card grid gap-3 sm:grid-cols-2" disabled={busy}>
-        <Field label={t('groupJoinPassword')} hint={t('groupJoinPasswordHint')} className="sm:col-span-2">
-          <input className="input" type={showJoinPassword ? 'text' : 'password'} autoComplete="new-password" minLength={12} maxLength={128} required {...inp('joinPassword')} disabled={false} />
-        </Field>
-        <label className="flex min-h-11 items-center gap-2 text-sm text-stone-700 sm:col-span-2">
-          <input type="checkbox" checked={showJoinPassword} onChange={(e) => setShowJoinPassword(e.target.checked)} />
-          {t('showPassword')}
-        </label>
-        <p className="text-xs text-stone-600 sm:col-span-2">{t('groupJoinApprovalHint')}</p>
-      </fieldset>}
 
       <fieldset className="card grid gap-3 sm:grid-cols-2" disabled={busy}>
         <Field label={t('selectionMethod')} className="sm:col-span-2">

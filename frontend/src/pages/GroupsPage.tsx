@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useApi } from '../lib/hooks';
 import { useI18n } from '../lib/i18n';
 import { npr, date } from '../lib/format';
-import { Alert, Badge, Empty, Spinner } from '../components/ui';
+import { Badge, Empty, Spinner } from '../components/ui';
 import type { Group, Role } from '../lib/types';
 
 type G = Group & { myRole: Role; myMemberId: string; myStatus: string };
@@ -14,12 +14,10 @@ export function GroupsPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">{t('myGroups')}</h1>
-        <div className="flex flex-wrap gap-2">
-          <Link to="/groups/join" className="btn-secondary">{t('joinExistingGroup')}</Link>
+        <div>
           <Link to="/groups/new" className="btn-primary">+ {t('createGroup')}</Link>
         </div>
       </div>
-      <Alert tone="blue">{t('inviteOnlyDescription')}</Alert>
       {loading ? <Spinner /> : !data?.groups.length ? <Empty>{t('noGroups')}</Empty> : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {data.groups.map((g) => (
