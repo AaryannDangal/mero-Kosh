@@ -40,8 +40,16 @@ roundsRouter.get('/:roundId', asyncHandler(async (req, res) => {
   if (!r) throw notFound('Round');
   const name = (id: string | null) => s.members.find((m) => m.id === id)?.fullName ?? null;
   const checklist = r.obligations.map((o) => {
-    const rs = s.balances.get(o.memberId)!.rounds.find((x) => x.roundId === r.id)!;
-    return { memberId: o.memberId, fullName: name(o.memberId), ...rs, isWinner: o.memberId === r.winnerMemberId };
+    const bal = s.balances.get(o.memberId)!;
+    const rs = bal.rounds.find((x) => x.roundId === r.id)!;
+    return {
+      memberId: o.memberId,
+      fullName: name(o.memberId),
+      ...rs,
+      isWinner: o.memberId === r.winnerMemberId,
+      hasReceivedPot: bal.hasReceivedPot,
+      potObligation: bal.potObligation ?? null,
+    };
   });
   const bids = await prisma.bid.findMany({ where: { roundId: r.id }, orderBy: { submittedAt: 'asc' } });
   const potRequests = r.selectionMethod === 'ADMIN_SELECTION'

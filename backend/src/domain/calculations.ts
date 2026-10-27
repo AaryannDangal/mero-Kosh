@@ -604,3 +604,76 @@ export function looksLikeCardNumber(value: string): boolean {
   }
   return sum % 10 === 0;
 }
+
+// ---------------------------------------------------------------------------
+// 10. Pot recipient obligation & interest calculation with advance return support
+// ---------------------------------------------------------------------------
+
+export interface PotObligationParams {
+  baseContribution: number; // paisa (e.g. 2000_00 for NPR 2,000)
+  initialPotAmount: number; // paisa (e.g. 20000_00 for NPR 20,000)
+  cumulativePrincipalRepaid: number; // paisa paid towards principal in regular rounds
+  cumulativeAdvanceRepayments: number; // paisa paid as advance principal repayments
+  potInterestRateBp: number; // basis points per month (e.g. 100 = 1% per month)
+  remainingRounds: number; // number of remaining active rounds
+}
+
+export interface PotObligationResult {
+  remainingPotPrincipal: number; // paisa
+  monthlyInterest: number; // paisa
+  principalInstallment: number; // paisa
+  totalMonthlyDue: number; // paisa
+  explanation: string;
+}
+
+/**
+ * Calculates the monthly required payment for a member who has taken/received the pot.
+ *
+ * Formula:
+ * - remainingPotPrincipal = max(0, initialPotAmount - cumulativePrincipalRepaid - cumulativeAdvanceRepayments)
+ * - monthlyInterest = Math.round((remainingPotPrincipal * potInterestRateBp) / 10000)
+ * - principalInstallment = remainingRounds > 0 ? min(remainingPotPrincipal, ceil(remainingPotPrincipal / remainingRounds)) : remainingPotPrincipal
+ * - totalMonthlyDue = baseContribution + principalInstallment + monthlyInterest
+ *
+ * Advance repayments directly reduce remainingPotPrincipal immediately, thereby
+ * automatically reducing subsequent monthly interest!
+ */
+export function calculatePotRecipientObligation(p: PotObligationParams): PotObligationResult {
+  assertInt(p.baseContribution, 'baseContribution');
+  assertInt(p.initialPotAmount, 'initialPotAmount');
+  assertInt(p.cumulativePrincipalRepaid, 'cumulativePrincipalRepaid');
+  assertInt(p.cumulativeAdvanceRepayments, 'cumulativeAdvanceRepayments');
+  assertInt(p.potInterestRateBp, 'potInterestRateBp');
+
+  const remainingPotPrincipal = Math.max(
+    0,
+    p.initialPotAmount - p.cumulativePrincipalRepaid - p.cumulativeAdvanceRepayments
+  );
+
+  if (remainingPotPrincipal <= 0) {
+    return {
+      remainingPotPrincipal: 0,
+      monthlyInterest: 0,
+      principalInstallment: 0,
+      totalMonthlyDue: p.baseContribution,
+      explanation: 'Pot amount fully returned. Regular monthly contribution due.',
+    };
+  }
+
+  const monthlyInterest = Math.round((remainingPotPrincipal * Math.max(0, p.potInterestRateBp)) / 10000);
+  const rounds = Math.max(1, p.remainingRounds);
+  const principalInstallment = Math.min(
+    remainingPotPrincipal,
+    Math.ceil(remainingPotPrincipal / rounds)
+  );
+
+  const totalMonthlyDue = p.baseContribution + principalInstallment + monthlyInterest;
+
+  return {
+    remainingPotPrincipal,
+    monthlyInterest,
+    principalInstallment,
+    totalMonthlyDue,
+    explanation: `Remaining principal: ${remainingPotPrincipal} paisa. Interest (${p.potInterestRateBp / 100}%): ${monthlyInterest} paisa. Principal installment: ${principalInstallment} paisa. Total monthly due: ${totalMonthlyDue} paisa.`,
+  };
+}

@@ -12,6 +12,17 @@ import { METHODS, type Member, type PaymentMethod, type Reconciliation, type Rou
 interface ChecklistRow {
   memberId: string; fullName: string; isWinner: boolean; contributionDue: number; discountCredit: number; amountDue: number; paid: number;
   pending?: number; outstanding: number; status: string; lateFeeAssessed?: number; lateFeeOutstanding?: number; daysLate: number;
+  hasReceivedPot?: boolean;
+  potObligation?: {
+    remainingPotPrincipal: number;
+    monthlyInterest: number;
+    principalInstallment: number;
+    totalMonthlyDue: number;
+    initialPotAmount: number;
+    cumulativePrincipalRepaid: number;
+    cumulativeAdvanceRepayments: number;
+    explanation: string;
+  } | null;
 }
 interface RoundDetail {
   round: Round;
@@ -77,6 +88,92 @@ export function RoundDetailPage() {
 
       {r.selectionMethod === 'BIDDING' && r.status !== 'UPCOMING' && <BiddingPanel d={data} onChange={reloadAll} />}
       {r.selectionMethod === 'ADMIN_SELECTION' && <PotRequestsPanel d={data} onChange={reloadAll} />}
+
+      {isManager && open && (
+        <Section title="⚡ Admin Quick Record (1-Click Payment / १-क्लिक भुक्तानी)">
+          <p className="mb-3 text-xs text-stone-600">No typing needed! Click 1-Click Record Payment to immediately log verified cash payments or record advance pot repayments.</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {checklist.map((c) => {
+              const potOb = c.potObligation;
+              const isPotHolder = c.hasReceivedPot && potOb && potOb.remainingPotPrincipal > 0;
+              const expectedAmount = isPotHolder ? potOb.totalMonthlyDue : c.outstanding;
+              const isPaid = c.outstanding === 0 && (!isPotHolder || potOb.monthlyInterest === 0);
+
+              return (
+                <div key={c.memberId} className={`rounded-xl border p-3 ${isPaid ? 'border-emerald-200 bg-emerald-50/40' : 'border-amber-200 bg-white shadow-sm'}`}>
+                  <div className="flex items-center justify-between font-bold">
+                    <span>{c.fullName} {c.isWinner && '🏆'}</span>
+                    <Badge status={c.status} />
+                  </div>
+                  {isPotHolder ? (
+                    <div className="mt-2 space-y-1 text-xs">
+                      <div className="inline-block rounded-full bg-purple-100 px-2 py-0.5 font-semibold text-purple-900">
+                        Pot Holder · Remaining Principal: {npr(potOb.remainingPotPrincipal, cur)}
+                      </div>
+                      <div className="text-stone-600">
+                        Base: {npr(c.contributionDue, cur)} + Principal: {npr(potOb.principalInstallment, cur)} + Interest: {npr(potOb.monthlyInterest, cur)}
+                      </div>
+                      <div className="font-semibold text-stone-900">Total Due: {npr(potOb.totalMonthlyDue, cur)}</div>
+                    </div>
+                  ) : (
+                    <div className="mt-1 text-xs text-stone-600">Monthly Contribution Due: <b>{npr(c.amountDue, cur)}</b></div>
+                  )}
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {!isPaid && (
+                      <button
+                        className="btn-primary btn-sm flex-1"
+                        onClick={() => exp.run(async () => {
+                          await api.form(`/groups/${group.id}/transactions`, {
+                            memberId: c.memberId,
+                            roundId: r.id,
+                            type: 'CONTRIBUTION',
+                            amount: expectedAmount > 0 ? expectedAmount : c.amountDue,
+                            method: 'CASH',
+                            paidAt: todayIso(),
+                            notes: isPotHolder ? 'Regular monthly payment + pot interest' : 'Regular monthly contribution',
+                            verify: true,
+                            cashReceivedInPerson: true,
+                          });
+                          reloadAll();
+                        })}
+                      >
+                        ✓ 1-Click Record Payment ({npr(expectedAmount > 0 ? expectedAmount : c.amountDue, cur)})
+                      </button>
+                    )}
+                    {isPotHolder && (
+                      <button
+                        className="btn-secondary btn-sm"
+                        onClick={() => {
+                          const advStr = prompt(`Record Advance Pot Return for ${c.fullName}\n\nCurrent Remaining Principal: ${npr(potOb.remainingPotPrincipal, cur)}\nEnter Advance Principal Repayment Amount (${cur}):`);
+                          if (!advStr || isNaN(Number(advStr)) || Number(advStr) <= 0) return;
+                          const advPaisa = toPaisa(advStr);
+                          exp.run(async () => {
+                            await api.form(`/groups/${group.id}/transactions`, {
+                              memberId: c.memberId,
+                              roundId: r.id,
+                              type: 'CONTRIBUTION',
+                              amount: advPaisa,
+                              method: 'CASH',
+                              paidAt: todayIso(),
+                              notes: 'ADVANCE_POT_REPAYMENT',
+                              verify: true,
+                              cashReceivedInPerson: true,
+                            });
+                            reloadAll();
+                          });
+                        }}
+                      >
+                        💰 Advance Pot Return
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Section>
+      )}
 
       <Section title={t('checklist')}>
         <div className="table-wrap">
