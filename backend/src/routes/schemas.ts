@@ -107,7 +107,7 @@ function groupRefine<T extends z.ZodTypeAny>(schema: T) {
 
 export const createGroupSchema = groupRefine(groupBase.extend({
   organizerParticipates: boolish.default(true),
-  joinPassword: z.string().min(12, 'Group password must be at least 12 characters').max(128),
+  joinPassword: z.preprocess((v) => (v === '' ? undefined : v), z.string().min(12).max(128).optional()),
 }));
 export const updateGroupSchema = groupRefine(groupBase.partial());
 export const groupJoinSchema = z.object({
