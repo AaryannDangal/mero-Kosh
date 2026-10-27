@@ -202,6 +202,7 @@ model Group {
   lateFeeCap         Int? // optional max late fee per member per round (paisa)
   gracePeriodDays    Int             @default(0)
   continueAfterPot   Boolean         @default(true)
+  potInterestRateBp  Int             @default(100)
   minBidDiscount     Int             @default(0)
   bidWinRule         BidWinRule      @default(HIGHEST_DISCOUNT)
   tieBreakRule       TieBreakRule    @default(EARLIEST)

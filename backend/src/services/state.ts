@@ -16,6 +16,8 @@ import {
   validateCycleZeroSum,
   CycleValidation,
   selectContributors,
+  calculatePotRecipientObligation,
+  PotObligationResult,
 } from '../domain/calculations';
 import { notFound } from '../lib/errors';
 
@@ -64,6 +66,11 @@ export interface MemberBalance {
   nextDue: { roundId: string; roundNumber: number; dueDate: Date; amountDue: number; outstanding: number } | null;
   paymentStatus: PaymentStatusT | 'NOT_APPLICABLE';
   potStatus: PotStatus;
+  potObligation?: PotObligationResult & {
+    initialPotAmount: number;
+    cumulativePrincipalRepaid: number;
+    cumulativeAdvanceRepayments: number;
+  } | null;
 }
 
 export interface GroupState {
@@ -189,6 +196,35 @@ export function computeGroupState(
     else if (currentState) overall = currentState.status;
     else if (roundStates.length) overall = roundStates.every((rs) => rs.status === 'PAID') ? 'PAID' : 'PARTIAL';
 
+    let potObligation = null;
+    if (m.hasReceivedPot) {
+      const winRound = rounds.find((r) => r.winnerMemberId === m.id && r.payoutToWinner != null);
+      const initialPotAmount = winRound?.payoutToWinner ?? (group.contributionAmount * group.memberCount);
+      const cumulativePrincipalRepaid = roundStates
+        .filter((rs) => winRound ? rs.roundNumber > winRound.roundNumber : false)
+        .reduce((a, rs) => a + Math.max(0, rs.paid - rs.contributionDue), 0);
+      const cumulativeAdvanceRepayments = mine
+        .filter((e) => e.status === 'VERIFIED' && (e.notes?.includes('ADVANCE_POT_REPAYMENT') || e.notes?.includes('ADVANCE_POT_RETURN')))
+        .reduce((a, e) => a + e.amount, 0);
+      const remainingRounds = upcoming.length;
+
+      const calc = calculatePotRecipientObligation({
+        baseContribution: group.contributionAmount,
+        initialPotAmount,
+        cumulativePrincipalRepaid,
+        cumulativeAdvanceRepayments,
+        potInterestRateBp: group.potInterestRateBp ?? 100,
+        remainingRounds,
+      });
+
+      potObligation = {
+        ...calc,
+        initialPotAmount,
+        cumulativePrincipalRepaid,
+        cumulativeAdvanceRepayments,
+      };
+    }
+
     const allClosed = rounds.length > 0 && rounds.every((r) => r.status === 'COMPLETED');
     balances.set(m.id, {
       memberId: m.id,
@@ -211,6 +247,7 @@ export function computeGroupState(
       nextDue,
       paymentStatus: overall,
       potStatus: m.hasReceivedPot ? (allClosed ? 'COMPLETED' : 'RECEIVED_POT') : 'WAITING_FOR_TURN',
+      potObligation,
     });
   }
 

@@ -31,6 +31,7 @@ export interface GroupInput {
   lateFeeCap?: number | null;
   gracePeriodDays: number;
   continueAfterPot: boolean;
+  potInterestRateBp: number;
   minBidDiscount: number;
   bidWinRule: Group['bidWinRule'];
   tieBreakRule: Group['tieBreakRule'];
@@ -44,7 +45,7 @@ export interface CreateGroupInput extends GroupInput { joinPassword: string }
 /** Fields that change the financial rules: editing them un-confirms the rules. */
 const RULE_FIELDS: (keyof GroupInput)[] = [
   'currency', 'contributionAmount', 'memberCount', 'startDate', 'frequency', 'collectionDueDay', 'selectionMethod',
-  'lateFeeType', 'lateFeeValue', 'lateFeeCap', 'gracePeriodDays', 'continueAfterPot', 'minBidDiscount', 'bidWinRule',
+  'lateFeeType', 'lateFeeValue', 'lateFeeCap', 'gracePeriodDays', 'continueAfterPot', 'potInterestRateBp', 'minBidDiscount', 'bidWinRule',
   'tieBreakRule', 'missedPaymentRules', 'earlyExitRules', 'earlyExitPenaltyBp',
 ];
 

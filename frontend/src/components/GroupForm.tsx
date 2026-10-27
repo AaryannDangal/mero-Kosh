@@ -9,7 +9,7 @@ const WEEKDAYS = { en: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 
 export interface GroupFormValues {
   name: string; description: string; currency: string; contribution: string; memberCount: string; startDate: string;
   frequency: Group['frequency']; collectionDueDay: string; selectionMethod: Group['selectionMethod']; lateFeeType: Group['lateFeeType'];
-  lateFee: string; lateFeeCap: string; gracePeriodDays: string; continueAfterPot: boolean; minBid: string; bidWinRule: Group['bidWinRule'];
+  lateFee: string; lateFeeCap: string; gracePeriodDays: string; continueAfterPot: boolean; potInterestRatePct: string; minBid: string; bidWinRule: Group['bidWinRule'];
   tieBreakRule: Group['tieBreakRule']; missedPaymentRules: string; earlyExitRules: string; exitPenaltyPct: string; organizerParticipates: boolean; joinPassword: string;
 }
 
@@ -18,7 +18,7 @@ export function valuesFromGroup(g?: Group): GroupFormValues {
     name: g?.name ?? '',
     description: g?.description ?? '',
     currency: g?.currency ?? 'NPR',
-    contribution: g ? fromPaisa(g.contributionAmount) : '10000',
+    contribution: g ? fromPaisa(g.contributionAmount) : '2000',
     memberCount: String(g?.memberCount ?? 5),
     startDate: g ? g.startDate.slice(0, 10) : todayIso(),
     frequency: g?.frequency ?? 'MONTHLY',
@@ -29,6 +29,7 @@ export function valuesFromGroup(g?: Group): GroupFormValues {
     lateFeeCap: g?.lateFeeCap != null ? fromPaisa(g.lateFeeCap) : '',
     gracePeriodDays: String(g?.gracePeriodDays ?? 3),
     continueAfterPot: g?.continueAfterPot ?? true,
+    potInterestRatePct: g ? String(g.potInterestRateBp / 100) : '1',
     minBid: g ? fromPaisa(g.minBidDiscount) : '0',
     bidWinRule: g?.bidWinRule ?? 'HIGHEST_DISCOUNT',
     tieBreakRule: g?.tieBreakRule ?? 'EARLIEST',
@@ -57,6 +58,7 @@ export function toPayload(v: GroupFormValues, includeOrganizer: boolean) {
     lateFeeCap: v.lateFeeCap === '' ? null : toPaisa(v.lateFeeCap),
     gracePeriodDays: Number(v.gracePeriodDays),
     continueAfterPot: v.continueAfterPot,
+    potInterestRateBp: Math.round(Number(v.potInterestRatePct || 1) * 100),
     minBidDiscount: v.selectionMethod === 'BIDDING' ? toPaisa(v.minBid || '0') : 0,
     bidWinRule: v.bidWinRule,
     tieBreakRule: v.tieBreakRule,
@@ -86,7 +88,26 @@ export function GroupForm({ initial, onSubmit, submitLabel, busy, error, isCreat
         <Field label={t('groupName')} className="sm:col-span-2"><input className="input" required minLength={2} {...inp('name')} disabled={false} /></Field>
         <Field label={t('description')} className="sm:col-span-2"><textarea className="input" rows={2} {...inp('description')} disabled={false} /></Field>
         <Field label={t('currency')}><input className="input uppercase" maxLength={3} required {...inp('currency')} /></Field>
-        <Field label={t('contributionAmount')}><input className="input" type="number" min="1" step="0.01" inputMode="decimal" required {...inp('contribution')} /></Field>
+        <Field label={t('contributionAmount')} className="sm:col-span-2">
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              {['1000', '2000', '3000', '4000', '5000'].map((amt) => (
+                <button
+                  type="button"
+                  key={amt}
+                  disabled={locked}
+                  onClick={() => set('contribution', amt)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                    v.contribution === amt ? 'bg-brand-600 text-white' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                  }`}
+                >
+                  {npr(toPaisa(amt), v.currency)} / mo
+                </button>
+              ))}
+            </div>
+            <input className="input" type="number" min="1" step="1" inputMode="numeric" required {...inp('contribution')} placeholder="Custom amount" />
+          </div>
+        </Field>
         <Field label={t('memberCount')}><input className="input" type="number" min="2" max="100" required {...inp('memberCount')} /></Field>
         <Field label={t('startDate')}><input className="input" type="date" required {...inp('startDate')} /></Field>
         <Field label={t('frequency')}>
@@ -142,6 +163,26 @@ export function GroupForm({ initial, onSubmit, submitLabel, busy, error, isCreat
             </Field>
           </>
         )}
+        <Field label={t('potInterestRate')} hint={t('potInterestRateHint')} className="sm:col-span-2">
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              {['0', '1', '2', '3', '5'].map((pct) => (
+                <button
+                  type="button"
+                  key={pct}
+                  disabled={locked}
+                  onClick={() => set('potInterestRatePct', pct)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                    v.potInterestRatePct === pct ? 'bg-brand-600 text-white' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                  }`}
+                >
+                  {pct}% / month
+                </button>
+              ))}
+            </div>
+            <input className="input" type="number" min="0" max="100" step="0.1" inputMode="decimal" required {...inp('potInterestRatePct')} />
+          </div>
+        </Field>
         <label className="flex items-start gap-2 text-sm sm:col-span-2">
           <input type="checkbox" className="mt-1" checked={v.continueAfterPot} disabled={locked} onChange={(e) => set('continueAfterPot', e.target.checked)} />
           {t('continueAfterPot')}

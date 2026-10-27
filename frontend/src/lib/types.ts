@@ -11,7 +11,7 @@ export interface Group {
   id: string; name: string; description: string | null; currency: string; contributionAmount: number; memberCount: number;
   startDate: string; frequency: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'; collectionDueDay: number; selectionMethod: 'FIXED_ROTATION' | 'ADMIN_SELECTION' | 'BIDDING';
   lateFeeType: 'NONE' | 'FIXED' | 'PERCENTAGE' | 'DAILY'; lateFeeValue: number; lateFeeCap: number | null; gracePeriodDays: number;
-  continueAfterPot: boolean; minBidDiscount: number; bidWinRule: 'HIGHEST_DISCOUNT' | 'LOWEST_DISCOUNT'; tieBreakRule: 'EARLIEST' | 'RANDOM';
+  continueAfterPot: boolean; potInterestRateBp: number; minBidDiscount: number; bidWinRule: 'HIGHEST_DISCOUNT' | 'LOWEST_DISCOUNT'; tieBreakRule: 'EARLIEST' | 'RANDOM';
   missedPaymentRules: string | null; earlyExitRules: string | null; earlyExitPenaltyBp: number;
   status: GroupStatus; rulesConfirmedAt: string | null; createdAt: string;
   joinCode?: string; hasJoinPassword?: boolean;

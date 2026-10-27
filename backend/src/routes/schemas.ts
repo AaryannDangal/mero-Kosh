@@ -75,6 +75,7 @@ const groupBase = z.object({
   lateFeeCap: z.preprocess((v) => (v === '' ? null : v), paisa.nullable().optional()),
   gracePeriodDays: z.coerce.number().int().min(0).max(60).default(0),
   continueAfterPot: boolish.default(true),
+  potInterestRateBp: z.coerce.number().int().min(0).max(10000).default(100),
   minBidDiscount: paisa.default(0),
   bidWinRule: z.enum(['HIGHEST_DISCOUNT', 'LOWEST_DISCOUNT']).default('HIGHEST_DISCOUNT'),
   tieBreakRule: z.enum(['EARLIEST', 'RANDOM']).default('EARLIEST'),
