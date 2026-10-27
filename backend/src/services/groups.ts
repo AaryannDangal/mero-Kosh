@@ -40,7 +40,7 @@ export interface GroupInput {
   earlyExitPenaltyBp: number;
 }
 
-export interface CreateGroupInput extends GroupInput { joinPassword: string }
+export interface CreateGroupInput extends GroupInput { joinPassword?: string }
 
 /** Fields that change the financial rules: editing them un-confirms the rules. */
 const RULE_FIELDS: (keyof GroupInput)[] = [
@@ -74,8 +74,9 @@ async function uniqueInviteCode(): Promise<string> {
 
 export async function createGroup(input: CreateGroupInput, organizer: { userId: string; fullName: string; email: string | null; phone: string | null; participates: boolean }, actor: Actor) {
   const inviteCode = await uniqueInviteCode();
-  const { joinPassword, ...groupInput } = input;
-  const joinPasswordHash = await hashPassword(joinPassword);
+  const { joinPassword, ...groupInput } = input as CreateGroupInput & { organizerParticipates?: boolean };
+  delete (groupInput as Record<string, unknown>).organizerParticipates;
+  const joinPasswordHash = joinPassword ? await hashPassword(joinPassword) : null;
   return prisma.$transaction(async (tx) => {
     const group = await tx.group.create({ data: { ...groupInput, inviteCode, joinPasswordHash, createdById: organizer.userId } });
     const member = await tx.groupMember.create({
