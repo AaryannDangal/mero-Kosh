@@ -87,7 +87,7 @@ export function RoundDetailPage() {
       </div>
 
       {r.selectionMethod === 'BIDDING' && r.status !== 'UPCOMING' && <BiddingPanel d={data} onChange={reloadAll} />}
-      {r.selectionMethod === 'ADMIN_SELECTION' && <PotRequestsPanel d={data} onChange={reloadAll} />}
+      {r.selectionMethod === 'ADMIN_SELECTION' && <PotAssignmentPanel d={data} onChange={reloadAll} />}
 
       {isManager && open && (
         <Section title="⚡ Admin Quick Record (1-Click Payment / १-क्लिक भुक्तानी)">
@@ -220,7 +220,7 @@ export function RoundDetailPage() {
   );
 }
 
-function PotRequestsPanel({ d, onChange }: { d: RoundDetail; onChange: () => void }) {
+function PotAssignmentPanel({ d, onChange }: { d: RoundDetail; onChange: () => void }) {
   const { group, isManager } = useGroup();
   const { round: r } = d;
   const { busy, error, run } = useAction();
@@ -230,12 +230,12 @@ function PotRequestsPanel({ d, onChange }: { d: RoundDetail; onChange: () => voi
   return (
     <Section title="🏆 Admin Pot Recipient Selector (ढुकुटी लिने सदस्य चयन)">
       {r.winnerName ? (
-        <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 font-semibold">
+        <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">
           Current Pot Recipient: {r.winnerName}
         </div>
       ) : (
         <p className="mb-3 text-xs text-stone-600">
-          Admin direct selection: Select the member who is taking the pot for this month from the dropdown below.
+          Select the member who is taking the pot for this round from the dropdown below.
         </p>
       )}
 
@@ -367,7 +367,6 @@ function PayoutPanel({ d, onChange }: { d: RoundDetail; onChange: () => void }) 
   const { t } = useI18n();
   const r = d.round;
   const [f, setF] = useState({ amount: r.payoutToWinner != null ? fromPaisa(r.payoutToWinner) : '', method: 'BANK_TRANSFER' as PaymentMethod, referenceNumber: '', paidAt: todayIso(), notes: '', proofUrl: '', verify: true });
-  const [file, setFile] = useState<File | null>(null);
   const { busy, error, run } = useAction();
   useEffect(() => { if (r.payoutToWinner != null) setF((p) => ({ ...p, amount: fromPaisa(r.payoutToWinner) })); }, [r.payoutToWinner]);
   const cur = group.currency;
@@ -391,26 +390,22 @@ function PayoutPanel({ d, onChange }: { d: RoundDetail; onChange: () => void }) 
   }
   if (!isManager) return null;
   if (!r.winnerMemberId) return <Section title={t('recordPayout')}><p className="text-sm text-stone-500">{r.selectionMethod === 'BIDDING' ? 'Close bidding first. / पहिले बोल बन्द गर्नुहोस्।' : '—'}</p></Section>;
-  const hasProof = !!file || !!f.proofUrl;
   const winnerRow = d.checklist.find((c) => c.memberId === r.winnerMemberId);
   return (
     <Section title={`${t('recordPayout')} → ${r.winnerName}`}>
       {winnerRow && winnerRow.outstanding > 0 && (
-        <div className="mb-3"><Alert>{r.winnerName} still owes {npr(winnerRow.outstanding, cur)} for this round. The recipient's own contribution must be verified before the payout can be recorded. / प्राप्तकर्ताको योगदान प्रमाणित भएपछि मात्र भुक्तानी रेकर्ड हुन्छ।</Alert></div>
+        <div className="mb-3"><Alert>{r.winnerName} still owes {npr(winnerRow.outstanding, cur)} for this round.</Alert></div>
       )}
       <div className="grid grid-cols-2 gap-3">
         <Field label={`${t('amount')} (${cur})`} hint={`= ${t('fullPot')} − ${t('bidDiscount')}`}><input className="input" type="number" step="0.01" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} /></Field>
         <Field label={t('paidAt')}><input className="input" type="date" max={todayIso()} value={f.paidAt} onChange={(e) => setF({ ...f, paidAt: e.target.value })} /></Field>
         <Field label={t('method')}><select className="input" value={f.method} onChange={(e) => setF({ ...f, method: e.target.value as PaymentMethod })}>{METHODS.map((m) => <option key={m} value={m}>{t(m)}</option>)}</select></Field>
-        <Field label={t('reference')}><input className="input" value={f.referenceNumber} onChange={(e) => setF({ ...f, referenceNumber: e.target.value })} /></Field>
-        <Field label={t('receipt')} className="col-span-2"><input className="input" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></Field>
-        <Field label={t('proofUrl')} className="col-span-2"><input className="input" type="url" value={f.proofUrl} onChange={(e) => setF({ ...f, proofUrl: e.target.value })} /></Field>
-        <label className={`col-span-2 flex items-center gap-2 text-sm ${hasProof ? '' : 'opacity-50'}`}><input type="checkbox" disabled={!hasProof} checked={f.verify && hasProof} onChange={(e) => setF({ ...f, verify: e.target.checked })} />{t('verifyNow')}</label>
+        <Field label={t('reference')}><input className="input" value={f.referenceNumber} onChange={(e) => setF({ ...f, referenceNumber: e.target.value })} placeholder="Ref (optional)" /></Field>
       </div>
       <ErrorText error={error} />
       <button className="btn-primary mt-3 w-full" disabled={busy || !f.amount}
         onClick={() => run(async () => {
-          await api.form(`/groups/${group.id}/rounds/${r.id}/payout`, { ...f, amount: toPaisa(f.amount), verify: f.verify && hasProof }, file);
+          await api.form(`/groups/${group.id}/rounds/${r.id}/payout`, { ...f, amount: toPaisa(f.amount), verify: true });
           onChange();
         })}>{t('recordPayout')}</button>
       <p className="mt-2 text-center text-[11px] text-stone-500">{t('noMoneyNotice')}</p>

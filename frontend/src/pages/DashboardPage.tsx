@@ -68,9 +68,6 @@ export function DashboardPage() {
         <Section title={`${t('myDashboard')} · ${me.data.member.fullName}`}
           action={group.status !== 'DRAFT' && group.status !== 'COMPLETED' && (
             <div className="flex flex-wrap items-center gap-2">
-              {!isManager && group.selectionMethod === 'ADMIN_SELECTION' && cr && (
-                <Link to={`rounds/${cr.id}`} className="btn-secondary btn-sm">{t('potRequestsAction')}</Link>
-              )}
               <button className="btn-primary btn-sm" onClick={() => setPay(b.nextDue ? { memberId: myMemberId, roundId: b.nextDue.roundId, amount: b.nextDue.outstanding || undefined } : { memberId: myMemberId })}>
                 📎 {t('uploadProof')}
               </button>
