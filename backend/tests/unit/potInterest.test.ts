@@ -37,7 +37,7 @@ describe('calculatePotRecipientObligation', () => {
     expect(res.totalMonthlyDue).toBe(4200_00);
   });
 
-  it('lowers monthly interest dynamically after advance principal repayment', () => {
+  it('keeps fixed interest on initial pot amount until completely paid off even after advance repayment', () => {
     // Suppose pot recipient makes an advance repayment of NPR 10,000
     const res = calculatePotRecipientObligation({
       baseContribution: 2000_00, // NPR 2,000
@@ -48,14 +48,14 @@ describe('calculatePotRecipientObligation', () => {
       remainingRounds: 10,
     });
 
-    // remaining principal drops to 10,000 NPR!
+    // remaining principal drops to 10,000 NPR
     expect(res.remainingPotPrincipal).toBe(10000_00);
-    // 1% interest is now calculated ONLY on 10,000 = 100 NPR (100_00 paisa)
-    expect(res.monthlyInterest).toBe(100_00);
+    // 1% interest remains calculated on INITIAL pot amount (20,000) = 200 NPR (200_00 paisa)
+    expect(res.monthlyInterest).toBe(200_00);
     // installment = 10,000 / 10 = 1,000 NPR
     expect(res.principalInstallment).toBe(1000_00);
-    // Total monthly due = 2,000 + 1,000 + 100 = 3,100 NPR
-    expect(res.totalMonthlyDue).toBe(3100_00);
+    // Total monthly due = 2,000 (base) + 1,000 (principal installment) + 200 (interest) = 3,200 NPR
+    expect(res.totalMonthlyDue).toBe(3200_00);
   });
 
   it('handles 0% interest rate correctly', () => {

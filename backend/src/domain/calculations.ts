@@ -660,7 +660,8 @@ export function calculatePotRecipientObligation(p: PotObligationParams): PotObli
     };
   }
 
-  const monthlyInterest = Math.round((remainingPotPrincipal * Math.max(0, p.potInterestRateBp)) / 10000);
+  // Interest remains calculated on the initial pot amount until the pot is completely paid off
+  const monthlyInterest = Math.round((p.initialPotAmount * Math.max(0, p.potInterestRateBp)) / 10000);
   const rounds = Math.max(1, p.remainingRounds);
   const principalInstallment = Math.min(
     remainingPotPrincipal,
@@ -674,6 +675,6 @@ export function calculatePotRecipientObligation(p: PotObligationParams): PotObli
     monthlyInterest,
     principalInstallment,
     totalMonthlyDue,
-    explanation: `Remaining principal: ${remainingPotPrincipal} paisa. Interest (${p.potInterestRateBp / 100}%): ${monthlyInterest} paisa. Principal installment: ${principalInstallment} paisa. Total monthly due: ${totalMonthlyDue} paisa.`,
+    explanation: `Remaining principal: ${remainingPotPrincipal} paisa. Fixed Interest on initial pot (${p.potInterestRateBp / 100}%): ${monthlyInterest} paisa. Principal installment: ${principalInstallment} paisa. Total monthly due: ${totalMonthlyDue} paisa.`,
   };
 }

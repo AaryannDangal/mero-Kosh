@@ -221,97 +221,55 @@ export function RoundDetailPage() {
 }
 
 function PotRequestsPanel({ d, onChange }: { d: RoundDetail; onChange: () => void }) {
-  const { group, isManager, myMemberId, myRole } = useGroup();
-  const { t } = useI18n();
+  const { group, isManager } = useGroup();
   const { round: r } = d;
   const { busy, error, run } = useAction();
-  const [selectingMemberId, setSelectingMemberId] = useState<string | null>(null);
-  const [decisionReason, setDecisionReason] = useState('');
-  const requestsOpen = !r.winnerMemberId && ['COLLECTING', 'PAYOUT_PENDING'].includes(r.status);
-  const canRequest = d.canRequestPot && requestsOpen && myRole !== 'VIEWER';
-  const eligibleIds = new Set(d.eligibleWinners.map((member) => member.memberId));
+  const [selectedMemberId, setSelectedMemberId] = useState(r.winnerMemberId || '');
   const canAllocate = isManager && ['COLLECTING', 'PAYOUT_PENDING'].includes(r.status) && !r.payoutEntryId;
-  const requestedPotAmount = r.fullPot ?? group.contributionAmount * group.memberCount;
+
   return (
-    <Section title={`${t('potRequests')} (${num(d.potRequests.length)})`}>
-      <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-sm text-amber-950">{t('potRequestVisibility')} <span className="font-medium">{t('potRequestLiveRefresh')}</span></div>
-      {d.potRequests.length ? (
-        <ul className="mb-3 divide-y divide-stone-100">
-          {d.potRequests.map((request, index) => (
-            <li key={request.memberId} className="py-3 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="font-semibold">{index + 1}. {request.fullName}{request.isMe ? ` · ${t('you')}` : ''}</span>
-                    <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-800">{t('requestedPotAmount')}: {npr(requestedPotAmount, group.currency)}</span>
-                  </div>
-                  <div className="text-xs text-stone-500">{dateTime(request.createdAt)}</div>
-                </div>
-                {canAllocate && eligibleIds.has(request.memberId) && (r.winnerMemberId === request.memberId ? (
-                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">{t('selectedRecipient')}</span>
-                ) : (
-                  <button
-                    className="btn-secondary btn-sm"
-                    disabled={busy}
-                    onClick={() => {
-                      setSelectingMemberId(selectingMemberId === request.memberId ? null : request.memberId);
-                      setDecisionReason('');
-                    }}
-                  >
-                    {selectingMemberId === request.memberId ? t('cancel') : r.winnerMemberId ? t('changeRecipient') : t('selectRequester')}
-                  </button>
-                ))}
-                {canAllocate && !eligibleIds.has(request.memberId) && (
-                  <span className="text-xs text-stone-500">{t('requesterNotEligible')}</span>
-                )}
-              </div>
-              {canAllocate && selectingMemberId === request.memberId && (
-                <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 p-3">
-                  <Field label={t('decisionReason')}>
-                    <textarea
-                      className="input mt-1"
-                      rows={2}
-                      value={decisionReason}
-                      onChange={(e) => setDecisionReason(e.target.value)}
-                      aria-label={`${t('decisionReason')}: ${request.fullName}`}
-                      autoFocus
-                    />
-                  </Field>
-                  <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
-                    <button className="btn-secondary btn-sm" disabled={busy} onClick={() => { setSelectingMemberId(null); setDecisionReason(''); }}>{t('cancel')}</button>
-                    <button
-                      className="btn-primary btn-sm"
-                      disabled={busy || decisionReason.trim().length < 5}
-                      onClick={() => run(async () => {
-                        await api.post(`/groups/${group.id}/rounds/${r.id}/winner-override`, { memberId: request.memberId, reason: decisionReason.trim() });
-                        setSelectingMemberId(null);
-                        setDecisionReason('');
-                        onChange();
-                      })}
-                    >{busy ? t('saving') : t('confirmRecipient')}</button>
-                  </div>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      ) : <p className="mb-3 text-sm text-stone-500">{t('noPotRequests')}</p>}
-      {canRequest && (
-        <div className="flex flex-wrap gap-2">
-          <button className={d.myPotRequest ? 'btn-secondary' : 'btn-primary'} disabled={busy} onClick={() => run(async () => {
-            if (d.myPotRequest) await api.del(`/groups/${group.id}/rounds/${r.id}/requests/me`);
-            else await api.post(`/groups/${group.id}/rounds/${r.id}/requests/me`);
-            onChange();
-          })}>{d.myPotRequest ? t('withdrawPotRequest') : t('requestPot')}</button>
-          {d.myPotRequest && <span className="self-center text-xs text-emerald-700">{t('requestSubmitted')}</span>}
+    <Section title="🏆 Admin Pot Recipient Selector (ढुकुटी लिने सदस्य चयन)">
+      {r.winnerName ? (
+        <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 font-semibold">
+          Current Pot Recipient: {r.winnerName}
         </div>
-      )}
-      {!canRequest && d.myPotRequest && r.winnerMemberId && (
-        <p className="text-sm font-medium text-emerald-800" role="status">
-          {r.winnerMemberId === myMemberId ? t('youSelectedForPot') : t('requestNotSelected').replace('{name}', r.winnerName ?? t('selectedRecipient'))}
+      ) : (
+        <p className="mb-3 text-xs text-stone-600">
+          Admin direct selection: Select the member who is taking the pot for this month from the dropdown below.
         </p>
       )}
-      {isManager && ['COLLECTING', 'PAYOUT_PENDING'].includes(r.status) && <p className="mt-2 text-xs text-stone-500">{t('adminSelectionHint')}</p>}
+
+      {canAllocate && (
+        <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-3">
+          <Field label="Select Member Taking the Pot">
+            <select
+              className="input"
+              value={selectedMemberId}
+              onChange={(e) => setSelectedMemberId(e.target.value)}
+            >
+              <option value="">-- Choose Member --</option>
+              {d.eligibleWinners.map((w) => (
+                <option key={w.memberId} value={w.memberId}>
+                  {w.fullName}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <button
+            className="btn-primary"
+            disabled={busy || !selectedMemberId || selectedMemberId === r.winnerMemberId}
+            onClick={() => run(async () => {
+              await api.post(`/groups/${group.id}/rounds/${r.id}/winner-override`, {
+                memberId: selectedMemberId,
+                reason: 'Direct pot recipient assignment by admin',
+              });
+              onChange();
+            })}
+          >
+            {r.winnerMemberId ? 'Change Pot Recipient' : 'Assign Pot Recipient'}
+          </button>
+        </div>
+      )}
       <ErrorText error={error} />
     </Section>
   );
