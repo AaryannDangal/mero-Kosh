@@ -126,7 +126,8 @@ export function computeGroupState(
       if (!ob) continue;
       const contribEntries = mine.filter((e) => {
         const roundId = e.type === 'CORRECTION' ? e.corrects?.roundId ?? e.roundId : e.roundId;
-        return roundId === r.id && CONTRIB_TYPES.includes(effectiveType(e));
+        const isAdvance = e.notes?.includes('ADVANCE_POT_REPAYMENT') || e.notes?.includes('ADVANCE_POT_RETURN');
+        return roundId === r.id && CONTRIB_TYPES.includes(effectiveType(e)) && !isAdvance;
       });
       const verified = contribEntries.filter((e) => e.status === 'VERIFIED');
       const pending = contribEntries.filter((e) => e.status === 'PENDING').reduce((a, e) => a + e.amount, 0);
@@ -200,9 +201,10 @@ export function computeGroupState(
     if (m.hasReceivedPot) {
       const winRound = rounds.find((r) => r.winnerMemberId === m.id && r.payoutToWinner != null);
       const initialPotAmount = winRound?.payoutToWinner ?? (group.contributionAmount * group.memberCount);
+      const monthlyInterestAmount = Math.round((initialPotAmount * Math.max(0, group.potInterestRateBp ?? 100)) / 10000);
       const cumulativePrincipalRepaid = roundStates
         .filter((rs) => winRound ? rs.roundNumber > winRound.roundNumber : false)
-        .reduce((a, rs) => a + Math.max(0, rs.paid - rs.contributionDue), 0);
+        .reduce((a, rs) => a + Math.max(0, rs.paid - rs.contributionDue - monthlyInterestAmount), 0);
       const cumulativeAdvanceRepayments = mine
         .filter((e) => e.status === 'VERIFIED' && (e.notes?.includes('ADVANCE_POT_REPAYMENT') || e.notes?.includes('ADVANCE_POT_RETURN')))
         .reduce((a, e) => a + e.amount, 0);

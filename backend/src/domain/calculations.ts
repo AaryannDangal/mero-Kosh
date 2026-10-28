@@ -631,12 +631,12 @@ export interface PotObligationResult {
  *
  * Formula:
  * - remainingPotPrincipal = max(0, initialPotAmount - cumulativePrincipalRepaid - cumulativeAdvanceRepayments)
- * - monthlyInterest = Math.round((remainingPotPrincipal * potInterestRateBp) / 10000)
+ * - monthlyInterest = remainingPotPrincipal > 0 ? Math.round((initialPotAmount * potInterestRateBp) / 10000) : 0
  * - principalInstallment = remainingRounds > 0 ? min(remainingPotPrincipal, ceil(remainingPotPrincipal / remainingRounds)) : remainingPotPrincipal
  * - totalMonthlyDue = baseContribution + principalInstallment + monthlyInterest
  *
- * Advance repayments directly reduce remainingPotPrincipal immediately, thereby
- * automatically reducing subsequent monthly interest!
+ * Interest is calculated as a fixed monthly amount on initialPotAmount while remainingPotPrincipal > 0.
+ * Advance repayments directly reduce remainingPotPrincipal immediately.
  */
 export function calculatePotRecipientObligation(p: PotObligationParams): PotObligationResult {
   assertInt(p.baseContribution, 'baseContribution');
