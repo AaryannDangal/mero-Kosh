@@ -4,7 +4,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '../../src/lib/prisma';
-import { api, baseGroup, expectOk, NPR, register, resetDb, Session } from './helpers';
+import { api, baseGroup, expectOk, NPR, register, resetDb, Session, testPhone } from './helpers';
 
 describe('reconciliation with a missing payment', () => {
   let org: Session;
@@ -24,15 +24,24 @@ describe('reconciliation with a missing payment', () => {
     groupId = g.group.id;
     // Nabin is pre-added by email and is linked to his account automatically
     for (const [i, name] of ['Nabin', 'Pooja', 'Rajesh', 'Sunita'].entries()) {
-      expectOk(await o.post(`/api/groups/${groupId}/members`, { fullName: name, email: i === 0 ? 'nabin@example.com' : undefined, rotationOrder: i + 2 }), 201);
+      expectOk(await o.post(`/api/groups/${groupId}/members`, { fullName: name, phone: testPhone(), email: i === 0 ? 'nabin@example.com' : undefined, rotationOrder: i + 2 }), 201);
     }
-    expectOk(await o.post(`/api/groups/${groupId}/members`, { fullName: 'Auditor', email: 'auditor@example.com', role: 'VIEWER' }), 201);
+    expectOk(await o.post(`/api/groups/${groupId}/members`, { fullName: 'Auditor', phone: testPhone(), email: 'auditor@example.com', role: 'VIEWER' }), 201);
     expectOk(await o.post(`/api/groups/${groupId}/confirm-rules`));
     expectOk(await o.post(`/api/groups/${groupId}/start`));
-    const members = expectOk(await o.get(`/api/groups/${groupId}/members`)).members
+    const all = expectOk(await o.get(`/api/groups/${groupId}/members`)).members;
+    const seatOf = (name: string) => all.find((m: { fullName: string }) => m.fullName === name).id;
+    ids = all
       .filter((m: { isContributor: boolean }) => m.isContributor)
-      .sort((a: { rotationOrder: number }, b: { rotationOrder: number }) => a.rotationOrder - b.rotationOrder);
-    ids = members.map((m: { id: string }) => m.id);
+      .sort((a: { rotationOrder: number }, b: { rotationOrder: number }) => a.rotationOrder - b.rotationOrder)
+      .map((m: { id: string }) => m.id);
+
+    // A seat is linked to an account through an invitation the member accepts.
+    for (const [seat, session] of [[seatOf('Nabin'), member], [seatOf('Auditor'), viewer]] as const) {
+      const invite = expectOk(await o.post(`/api/groups/${groupId}/members/${seat}/invitation`), 201);
+      expectOk(await api(session).post(`/api/invitations/${invite.inviteUrl.split('/').pop()}/accept`));
+    }
+
     round1 = expectOk(await o.get(`/api/groups/${groupId}/rounds`)).rounds[0];
   });
   afterAll(async () => {

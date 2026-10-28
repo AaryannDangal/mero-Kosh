@@ -72,9 +72,13 @@ export async function createEntry(groupId: string, caller: GroupMember, input: C
       const rs = state.balances.get(member.id)?.rounds.find((r) => r.roundId === round.id);
       if (input.type === 'CONTRIBUTION') {
         if (!rs) throw unprocessable('Member has no contribution obligation in this round');
-        const room = rs.amountDue - rs.paid - rs.pending;
+        // A pot holder also repays the pot they took (interest + principal) through this
+        // endpoint, so their allowance covers the pot debt still outstanding.
+        const potOb = state.balances.get(member.id)?.potObligation;
+        const potRoom = potOb ? potOb.remainingPotPrincipal + potOb.monthlyInterest : 0;
+        const room = rs.amountDue - rs.paid - rs.pending + potRoom;
         if (input.amount > room) {
-          throw unprocessable(`Amount exceeds what is still owed for round ${round.roundNumber} (${formatNpr(Math.max(0, room), group.currency)} including pending submissions)`);
+          throw unprocessable(`Amount exceeds what is still owed for round ${round.roundNumber} (${formatNpr(Math.max(0, room), group.currency)} including pending submissions${potRoom ? ' and the pot still to repay' : ''})`);
         }
       }
       if (input.type === 'LATE_FEE') {
@@ -178,7 +182,10 @@ export async function verifyEntry(groupId: string, entryId: string, cashReceived
     if (entry.type === 'CONTRIBUTION' && entry.roundId) {
       const state = await loadGroupState(tx, groupId, now());
       const rs = state.balances.get(entry.memberId)?.rounds.find((r) => r.roundId === entry.roundId);
-      if (rs && entry.amount > rs.amountDue - rs.paid) throw unprocessable('Verifying this would exceed the amount due for the round. Reject it instead.');
+      // Pot holders repay the pot through this endpoint too, so allow the pot balance.
+      const potOb = state.balances.get(entry.memberId)?.potObligation;
+      const potRoom = potOb ? potOb.remainingPotPrincipal + potOb.monthlyInterest : 0;
+      if (rs && entry.amount > rs.amountDue - rs.paid + potRoom) throw unprocessable('Verifying this would exceed the amount due for the round. Reject it instead.');
     }
     const ledgerRoundId = await currentLedgerRoundId(tx, groupId);
     const updated = await tx.ledgerEntry.update({
