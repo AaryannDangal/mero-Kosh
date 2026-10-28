@@ -17,6 +17,7 @@ import {
   CycleValidation,
   selectContributors,
   calculatePotRecipientObligation,
+  potMonthlyInterest,
   PotObligationResult,
 } from '../domain/calculations';
 import { notFound } from '../lib/errors';
@@ -209,11 +210,17 @@ export function computeGroupState(
     if (m.hasReceivedPot) {
       const winRound = rounds.find((r) => r.winnerMemberId === m.id && r.payoutToWinner != null);
       const initialPotAmount = winRound?.payoutToWinner ?? (group.contributionAmount * group.memberCount);
+      const monthlyInterest = potMonthlyInterest(initialPotAmount, group.potInterestRateBp ?? 100);
       // Their normal contribution in every round after the pot win is credited against the pot.
-      // Capped at the group's share per round so an overpayment never repays more than one round.
+      // One month's interest is covered by the first money above the share; everything else
+      // clears principal, so paying more than the monthly due never loses money.
       const cumulativePrincipalRepaid = roundStates
         .filter((rs) => winRound ? rs.roundNumber > winRound.roundNumber : false)
-        .reduce((a, rs) => a + Math.min(Math.max(0, rs.paid), group.contributionAmount), 0);
+        .reduce((a, rs) => {
+          const paid = Math.max(0, rs.paid);
+          const interestCovered = Math.min(monthlyInterest, Math.max(0, paid - group.contributionAmount));
+          return a + paid - interestCovered;
+        }, 0);
       const cumulativeAdvanceRepayments = mine
         .filter((e) => e.status === 'VERIFIED' && (e.notes?.includes('ADVANCE_POT_REPAYMENT') || e.notes?.includes('ADVANCE_POT_RETURN')))
         .reduce((a, e) => a + e.amount, 0);

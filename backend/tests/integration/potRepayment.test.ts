@@ -142,6 +142,26 @@ describe('pot winner repays the pot', () => {
     expect(tooMuch.status).toBe(422);
   });
 
+  it('credits a second payment in the same round against the pot instead of losing it', async () => {
+    const o = api(org);
+    const winner = memberIds[0];
+    const rounds = expectOk(await o.get(`/api/groups/${groupId}/rounds`)).rounds;
+    const round2 = rounds.find((r: { roundNumber: number }) => r.roundNumber === 2);
+
+    // paying the monthly due twice in the same round must not swallow the second payment
+    expectOk(await o.upload(`/api/groups/${groupId}/transactions`, {
+      memberId: winner, roundId: round2.id, type: 'CONTRIBUTION', amount: CONTRIBUTION + INTEREST,
+      method: 'CASH', paidAt, notes: 'Regular monthly payment + pot interest', verify: true,
+    }), 201);
+
+    // two monthly payments, one month's interest covered, the rest is principal
+    const credited = (CONTRIBUTION + INTEREST) * 2 - INTEREST;
+    const balance = expectOk(await o.get(`/api/groups/${groupId}/members/${winner}/balance`)).balance;
+    expect(balance.potObligation.cumulativePrincipalRepaid).toBe(credited);
+    expect(balance.potObligation.remainingPotPrincipal).toBe(POT - credited - NPR(5_000));
+    expect(balance.potObligation.monthlyInterest).toBe(INTEREST);
+  });
+
   it('still refuses overpayment from members who do not owe a pot', async () => {
     const o = api(org);
     const rounds = expectOk(await o.get(`/api/groups/${groupId}/rounds`)).rounds;

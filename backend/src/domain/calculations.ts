@@ -640,6 +640,14 @@ export interface PotObligationResult {
  * Advance repayments reduce remainingPotPrincipal immediately but do not change
  * the interest, which stays on the original pot until the whole thing is paid off.
  */
+/**
+ * The monthly interest a pot winner owes. Charged on the ORIGINAL pot, so it stays
+ * the same until the pot is fully repaid - a lump sum shortens the debt, not the interest.
+ */
+export function potMonthlyInterest(initialPotAmount: number, potInterestRateBp: number): number {
+  return Math.round((initialPotAmount * Math.max(0, potInterestRateBp)) / 10000);
+}
+
 export function calculatePotRecipientObligation(p: PotObligationParams): PotObligationResult {
   assertInt(p.baseContribution, 'baseContribution');
   assertInt(p.initialPotAmount, 'initialPotAmount');
@@ -662,7 +670,7 @@ export function calculatePotRecipientObligation(p: PotObligationParams): PotObli
     };
   }
 
-  const monthlyInterest = Math.round((p.initialPotAmount * Math.max(0, p.potInterestRateBp)) / 10000);
+  const monthlyInterest = potMonthlyInterest(p.initialPotAmount, p.potInterestRateBp);
   const principalInstallment = Math.min(remainingPotPrincipal, p.baseContribution);
 
   const totalMonthlyDue = principalInstallment + monthlyInterest;
