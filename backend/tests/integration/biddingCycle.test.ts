@@ -54,15 +54,21 @@ describe('5-member bidding cycle', () => {
     await prisma.$disconnect();
   });
 
-  it('sets up the group with invite-code joins and starts it', async () => {
-    const g = expectOk(await api(A).post('/api/groups', { ...baseGroup, selectionMethod: 'BIDDING', startDate: '2026-01-05' }), 201);
+  it('sets up the group with join-code joins and starts it', async () => {
+    const joinPassword = 'DemoDhukutiJoin2026!';
+    const g = expectOk(await api(A).post('/api/groups', { ...baseGroup, selectionMethod: 'BIDDING', startDate: '2026-01-05', joinPassword }), 201);
     groupId = g.group.id;
     for (const s of [B, C, D, E]) {
-      expectOk(await api(s).post('/api/groups/join', { inviteCode: g.group.inviteCode, paymentMethod: 'ESEWA', paymentIdentifier: '98' + Math.floor(1e7 + Math.random() * 9e7) }), 201);
+      expectOk(await api(s).post('/api/groups/join', { code: g.group.joinCode, password: joinPassword }), 201);
     }
-    // members do not see the invite code or each other's private details
+    // the organizer approves every join request
+    const requests = expectOk(await api(A).get(`/api/groups/${groupId}/join-requests`)).requests;
+    expect(requests).toHaveLength(4);
+    for (const r of requests) expectOk(await api(A).post(`/api/groups/${groupId}/join-requests/${r.id}/approve`));
+
+    // members do not see the join code or each other's private details
     const asB = expectOk(await api(B).get(`/api/groups/${groupId}`));
-    expect(asB.group.inviteCode).toBeUndefined();
+    expect(asB.group.joinCode).toBeUndefined();
     const membersAsB = expectOk(await api(B).get(`/api/groups/${groupId}/members`)).members;
     expect(membersAsB.find((m: { fullName: string }) => m.fullName === 'Chandra').phone).toBeUndefined();
 

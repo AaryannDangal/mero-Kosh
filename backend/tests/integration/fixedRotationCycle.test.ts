@@ -23,7 +23,7 @@ describe('5-member fixed-rotation cycle', () => {
     const o = api(org);
     const created = expectOk(await o.post('/api/groups', { ...baseGroup, selectionMethod: 'FIXED_ROTATION', startDate: '2026-01-01' }), 201);
     groupId = created.group.id;
-    expect(created.group.inviteCode).toMatch(/^DK-/);
+    expect(created.group.joinCode).toMatch(/^DK-/);
     expect(created.rules.en.length).toBeGreaterThan(5);
     expect(created.rules.ne.length).toBe(created.rules.en.length);
 
@@ -34,7 +34,7 @@ describe('5-member fixed-rotation cycle', () => {
       { fullName: 'माया गुरुङ', phone: '9814444444', paymentMethod: 'CASH' },
     ];
     // full card numbers are refused
-    const bad = await o.post(`/api/groups/${groupId}/members`, { fullName: 'Card Person', paymentMethod: 'OTHER', paymentIdentifier: '4111 1111 1111 1111' });
+    const bad = await o.post(`/api/groups/${groupId}/members`, { fullName: 'Card Person', phone: '9851000001', paymentMethod: 'OTHER', paymentIdentifier: '4111 1111 1111 1111' });
     expect(bad.status).toBe(422);
 
     for (const p of people) {
@@ -42,11 +42,11 @@ describe('5-member fixed-rotation cycle', () => {
       expect(r.member.fullName).toBe(p.fullName);
     }
     // 6th seat is refused
-    expect((await o.post(`/api/groups/${groupId}/members`, { fullName: 'Extra Person' })).status).toBe(409);
+    expect((await o.post(`/api/groups/${groupId}/members`, { fullName: 'Extra Person', phone: '9851000002' })).status).toBe(409);
 
     const members = expectOk(await o.get(`/api/groups/${groupId}/members`)).members;
     expect(members).toHaveLength(5);
-    expect(members.find((m: { fullName: string }) => m.fullName === 'राम बहादुर थापा').phone).toBe('9841111111'); // Devanagari digits normalised
+    expect(members.find((m: { fullName: string }) => m.fullName === 'राम बहादुर थापा').phone).toBe('+9779841111111'); // Devanagari digits normalised to E.164
 
     // cannot start before confirming rules
     expect((await o.post(`/api/groups/${groupId}/start`)).status).toBe(422);
@@ -88,8 +88,8 @@ describe('5-member fixed-rotation cycle', () => {
         }), 201);
         expect(res.entry.status).toBe('VERIFIED');
       }
-      // overpayment is refused
-      const over = await o.upload(`/api/groups/${groupId}/transactions`, { memberId: memberIds[1], roundId: round.id, type: 'CONTRIBUTION', amount: 1, method: 'CASH', paidAt });
+      // overpayment is refused (the last member never holds the pot, so no pot allowance applies)
+      const over = await o.upload(`/api/groups/${groupId}/transactions`, { memberId: memberIds[4], roundId: round.id, type: 'CONTRIBUTION', amount: 1, method: 'CASH', paidAt });
       expect(over.status).toBe(422);
 
       const detail = expectOk(await o.get(`/api/groups/${groupId}/rounds/${round.id}`));
