@@ -36,6 +36,17 @@ export interface MemberRoundState {
   pending: number; outstanding: number; status: string; lateFeeAssessed: number; lateFeePaid: number; lateFeeOutstanding: number; daysLate: number;
 }
 
+export interface PotObligation {
+  remainingPotPrincipal: number;
+  monthlyInterest: number;
+  principalInstallment: number;
+  totalMonthlyDue: number;
+  initialPotAmount: number;
+  cumulativePrincipalRepaid: number;
+  cumulativeAdvanceRepayments: number;
+  explanation: string;
+}
+
 export interface Balance {
   memberId: string; fullName: string; status: string; hasReceivedPot: boolean;
   totals: { contributions: number; discountCredits: number; lateFeesPaid: number; penaltiesPaid: number; potReceived: number; refundsReceived: number; adjustments: number; netPosition: number };
@@ -43,6 +54,7 @@ export interface Balance {
   lateFeeOutstanding: number; remainingContributions: number; pendingAmount: number;
   nextDue: { roundId: string; roundNumber: number; dueDate: string; amountDue: number; outstanding: number } | null;
   paymentStatus: string; potStatus: string;
+  potObligation?: PotObligation | null;
 }
 
 export interface Round {

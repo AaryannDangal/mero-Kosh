@@ -89,6 +89,33 @@ export function DashboardPage() {
             <Stat label={t('remainingContributions')} value={npr(b.remainingContributions, cur)} />
             <Stat label={t('arrears')} value={npr(b.arrears, cur)} tone={b.arrears > 0 ? 'red' : 'green'} />
           </div>
+          {b.potObligation && b.potObligation.remainingPotPrincipal > 0 && (
+            <div className="mt-3 rounded-xl border border-purple-200 bg-purple-50/60 p-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold text-purple-900">{t('potDebt')}</span>
+                <span className="font-bold text-purple-900">{npr(b.potObligation.totalMonthlyDue, cur)} · {t('potMonthlyDue')}</span>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                <div>
+                  <div className="text-purple-900/70">{t('potPrincipalLeft')}</div>
+                  <div className="font-semibold text-purple-900">{npr(b.potObligation.remainingPotPrincipal, cur)}</div>
+                </div>
+                <div>
+                  <div className="text-purple-900/70">{t('potInterest')}</div>
+                  <div className="font-semibold text-purple-900">{npr(b.potObligation.monthlyInterest, cur)}</div>
+                </div>
+                <div>
+                  <div className="text-purple-900/70">{t('potRepaidSoFar')}</div>
+                  <div className="font-semibold text-purple-900">{npr(b.potObligation.cumulativePrincipalRepaid + b.potObligation.cumulativeAdvanceRepayments, cur)}</div>
+                </div>
+                <div>
+                  <div className="text-purple-900/70">{t('potOriginalAmount')}</div>
+                  <div className="font-semibold text-purple-900">{npr(b.potObligation.initialPotAmount, cur)}</div>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-purple-900/80">{t('potDebtHint')}</p>
+            </div>
+          )}
           <h3 className="mb-2 mt-4 text-sm font-bold">{t('paymentHistory')}</h3>
           {me.data.history.length === 0 ? <Empty /> : (
             <ul className="divide-y divide-stone-100">

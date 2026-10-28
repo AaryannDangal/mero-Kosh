@@ -615,7 +615,6 @@ export interface PotObligationParams {
   cumulativePrincipalRepaid: number; // paisa paid towards principal in regular rounds
   cumulativeAdvanceRepayments: number; // paisa paid as advance principal repayments
   potInterestRateBp: number; // basis points per month (e.g. 100 = 1% per month)
-  remainingRounds: number; // number of remaining active rounds
 }
 
 export interface PotObligationResult {
@@ -629,14 +628,17 @@ export interface PotObligationResult {
 /**
  * Calculates the monthly required payment for a member who has taken/received the pot.
  *
- * Formula:
- * - remainingPotPrincipal = max(0, initialPotAmount - cumulativePrincipalRepaid - cumulativeAdvanceRepayments)
- * - monthlyInterest = Math.round((remainingPotPrincipal * potInterestRateBp) / 10000)
- * - principalInstallment = remainingRounds > 0 ? min(remainingPotPrincipal, ceil(remainingPotPrincipal / remainingRounds)) : remainingPotPrincipal
- * - totalMonthlyDue = baseContribution + principalInstallment + monthlyInterest
+ * The pot winner keeps paying the group's normal contribution, and that share is
+ * credited against the pot they took. On top of it they pay interest on the pot:
  *
- * Advance repayments directly reduce remainingPotPrincipal immediately, thereby
- * automatically reducing subsequent monthly interest!
+ * - remainingPotPrincipal = max(0, initialPotAmount - cumulativePrincipalRepaid - cumulativeAdvanceRepayments)
+ * - monthlyInterest = round(initialPotAmount * potInterestRateBp / 10000), charged on the ORIGINAL pot
+ *   and therefore unchanged until the debt is fully cleared
+ * - principalInstallment = min(remainingPotPrincipal, baseContribution) — the normal share credited to the pot
+ * - totalMonthlyDue = principalInstallment + monthlyInterest
+ *
+ * Advance repayments reduce remainingPotPrincipal immediately but do not change
+ * the interest, which stays on the original pot until the whole thing is paid off.
  */
 export function calculatePotRecipientObligation(p: PotObligationParams): PotObligationResult {
   assertInt(p.baseContribution, 'baseContribution');
@@ -660,20 +662,16 @@ export function calculatePotRecipientObligation(p: PotObligationParams): PotObli
     };
   }
 
-  const monthlyInterest = Math.round((remainingPotPrincipal * Math.max(0, p.potInterestRateBp)) / 10000);
-  const rounds = Math.max(1, p.remainingRounds);
-  const principalInstallment = Math.min(
-    remainingPotPrincipal,
-    Math.ceil(remainingPotPrincipal / rounds)
-  );
+  const monthlyInterest = Math.round((p.initialPotAmount * Math.max(0, p.potInterestRateBp)) / 10000);
+  const principalInstallment = Math.min(remainingPotPrincipal, p.baseContribution);
 
-  const totalMonthlyDue = p.baseContribution + principalInstallment + monthlyInterest;
+  const totalMonthlyDue = principalInstallment + monthlyInterest;
 
   return {
     remainingPotPrincipal,
     monthlyInterest,
     principalInstallment,
     totalMonthlyDue,
-    explanation: `Remaining principal: ${remainingPotPrincipal} paisa. Interest (${p.potInterestRateBp / 100}%): ${monthlyInterest} paisa. Principal installment: ${principalInstallment} paisa. Total monthly due: ${totalMonthlyDue} paisa.`,
+    explanation: `Remaining principal: ${remainingPotPrincipal} paisa. Interest on the original pot (${p.potInterestRateBp / 100}%): ${monthlyInterest} paisa. Contribution credited to the pot: ${principalInstallment} paisa. Total monthly due: ${totalMonthlyDue} paisa.`,
   };
 }
