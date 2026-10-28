@@ -23,8 +23,18 @@ export interface Session {
   email: string;
 }
 
+/**
+ * `users.phone` is unique, so every registration needs its own number.
+ * The old hard-coded 9841000000 made the 2nd register in a file fail with 409.
+ */
+let phoneSeq = 0;
+export function testPhone(): string {
+  phoneSeq += 1;
+  return `98${String(10000000 + phoneSeq)}`;
+}
+
 export async function register(email: string, fullName: string, password = 'password123'): Promise<Session> {
-  const res = await request(app).post('/api/auth/register').send({ email, password, fullName, phone: '9841000000' });
+  const res = await request(app).post('/api/auth/register').send({ email, password, fullName, phone: testPhone() });
   if (res.status !== 201) throw new Error(`register failed ${res.status} ${JSON.stringify(res.body)}`);
   return { token: res.body.token, userId: res.body.user.id, email };
 }

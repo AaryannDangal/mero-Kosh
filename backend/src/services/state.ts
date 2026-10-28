@@ -17,6 +17,7 @@ import {
   CycleValidation,
   selectContributors,
   calculatePotRecipientObligation,
+  potMonthlyInterest,
   PotObligationResult,
 } from '../domain/calculations';
 import { notFound } from '../lib/errors';
@@ -87,6 +88,15 @@ export interface GroupState {
 
 const CONTRIB_TYPES: EntryType[] = ['CONTRIBUTION'];
 
+/**
+ * Pot-interest payments and lump-sum pot repayments are money that repays the pot,
+ * not the round contribution, so they are tracked apart from the round obligation.
+ */
+export function isPotRepaymentEntry(e: { notes?: string | null }): boolean {
+  const notes = e.notes ?? '';
+  return notes.includes('POT_INTEREST') || notes.includes('ADVANCE_POT_REPAYMENT') || notes.includes('ADVANCE_POT_RETURN');
+}
+
 /** effective type of an entry (corrections inherit the type of their target) */
 export function effectiveType(e: EntryWithTarget): EntryType {
   if (e.type === 'CORRECTION') return e.corrects?.type ?? 'MANUAL_ADJUSTMENT';
@@ -126,8 +136,7 @@ export function computeGroupState(
       if (!ob) continue;
       const contribEntries = mine.filter((e) => {
         const roundId = e.type === 'CORRECTION' ? e.corrects?.roundId ?? e.roundId : e.roundId;
-        const isAdvance = e.notes?.includes('ADVANCE_POT_REPAYMENT') || e.notes?.includes('ADVANCE_POT_RETURN');
-        return roundId === r.id && CONTRIB_TYPES.includes(effectiveType(e)) && !isAdvance;
+        return roundId === r.id && CONTRIB_TYPES.includes(effectiveType(e)) && !isPotRepaymentEntry(e);
       });
       const verified = contribEntries.filter((e) => e.status === 'VERIFIED');
       const pending = contribEntries.filter((e) => e.status === 'PENDING').reduce((a, e) => a + e.amount, 0);
@@ -201,14 +210,20 @@ export function computeGroupState(
     if (m.hasReceivedPot) {
       const winRound = rounds.find((r) => r.winnerMemberId === m.id && r.payoutToWinner != null);
       const initialPotAmount = winRound?.payoutToWinner ?? (group.contributionAmount * group.memberCount);
-      const monthlyInterestAmount = Math.round((initialPotAmount * Math.max(0, group.potInterestRateBp ?? 100)) / 10000);
+      const monthlyInterest = potMonthlyInterest(initialPotAmount, group.potInterestRateBp ?? 100);
+      // Their normal contribution in every round after the pot win is credited against the pot.
+      // One month's interest is covered by the first money above the share; everything else
+      // clears principal, so paying more than the monthly due never loses money.
       const cumulativePrincipalRepaid = roundStates
         .filter((rs) => winRound ? rs.roundNumber > winRound.roundNumber : false)
-        .reduce((a, rs) => a + Math.max(0, rs.paid - rs.contributionDue - monthlyInterestAmount), 0);
+        .reduce((a, rs) => {
+          const paid = Math.max(0, rs.paid);
+          const interestCovered = Math.min(monthlyInterest, Math.max(0, paid - group.contributionAmount));
+          return a + paid - interestCovered;
+        }, 0);
       const cumulativeAdvanceRepayments = mine
         .filter((e) => e.status === 'VERIFIED' && (e.notes?.includes('ADVANCE_POT_REPAYMENT') || e.notes?.includes('ADVANCE_POT_RETURN')))
         .reduce((a, e) => a + e.amount, 0);
-      const remainingRounds = upcoming.length;
 
       const calc = calculatePotRecipientObligation({
         baseContribution: group.contributionAmount,
@@ -216,7 +231,6 @@ export function computeGroupState(
         cumulativePrincipalRepaid,
         cumulativeAdvanceRepayments,
         potInterestRateBp: group.potInterestRateBp ?? 100,
-        remainingRounds,
       });
 
       potObligation = {

@@ -108,12 +108,12 @@ export function RoundDetailPage() {
                   {isPotHolder ? (
                     <div className="mt-2 space-y-1 text-xs">
                       <div className="inline-block rounded-full bg-purple-100 px-2 py-0.5 font-semibold text-purple-900">
-                        Pot Holder · Remaining Principal: {npr(potOb.remainingPotPrincipal, cur)}
+                        Pot Holder · {t('potPrincipalLeft')}: {npr(potOb.remainingPotPrincipal, cur)}
                       </div>
                       <div className="text-stone-600">
-                        Base: {npr(c.contributionDue, cur)} + Principal: {npr(potOb.principalInstallment, cur)} + Interest: {npr(potOb.monthlyInterest, cur)}
+                        {t('potShareCredited')}: {npr(potOb.principalInstallment, cur)} + {t('potInterest')}: {npr(potOb.monthlyInterest, cur)}
                       </div>
-                      <div className="font-semibold text-stone-900">Total Due: {npr(potOb.totalMonthlyDue, cur)}</div>
+                      <div className="font-semibold text-stone-900">{t('potMonthlyDue')}: {npr(potOb.totalMonthlyDue, cur)}</div>
                     </div>
                   ) : (
                     <div className="mt-1 text-xs text-stone-600">Monthly Contribution Due: <b>{npr(c.amountDue, cur)}</b></div>

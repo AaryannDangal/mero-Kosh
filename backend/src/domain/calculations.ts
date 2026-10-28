@@ -615,7 +615,6 @@ export interface PotObligationParams {
   cumulativePrincipalRepaid: number; // paisa paid towards principal in regular rounds
   cumulativeAdvanceRepayments: number; // paisa paid as advance principal repayments
   potInterestRateBp: number; // basis points per month (e.g. 100 = 1% per month)
-  remainingRounds: number; // number of remaining active rounds
 }
 
 export interface PotObligationResult {
@@ -627,17 +626,13 @@ export interface PotObligationResult {
 }
 
 /**
- * Calculates the monthly required payment for a member who has taken/received the pot.
- *
- * Formula:
- * - remainingPotPrincipal = max(0, initialPotAmount - cumulativePrincipalRepaid - cumulativeAdvanceRepayments)
- * - monthlyInterest = remainingPotPrincipal > 0 ? Math.round((initialPotAmount * potInterestRateBp) / 10000) : 0
- * - principalInstallment = remainingRounds > 0 ? min(remainingPotPrincipal, ceil(remainingPotPrincipal / remainingRounds)) : remainingPotPrincipal
- * - totalMonthlyDue = baseContribution + principalInstallment + monthlyInterest
- *
- * Interest is calculated as a fixed monthly amount on initialPotAmount while remainingPotPrincipal > 0.
- * Advance repayments directly reduce remainingPotPrincipal immediately.
+ * The monthly interest a pot winner owes. Charged on the ORIGINAL pot, so it stays
+ * the same until the pot is fully repaid - a lump sum shortens the debt, not the interest.
  */
+export function potMonthlyInterest(initialPotAmount: number, potInterestRateBp: number): number {
+  return Math.round((initialPotAmount * Math.max(0, potInterestRateBp)) / 10000);
+}
+
 export function calculatePotRecipientObligation(p: PotObligationParams): PotObligationResult {
   assertInt(p.baseContribution, 'baseContribution');
   assertInt(p.initialPotAmount, 'initialPotAmount');
@@ -660,21 +655,16 @@ export function calculatePotRecipientObligation(p: PotObligationParams): PotObli
     };
   }
 
-  // Interest remains calculated on the initial pot amount until the pot is completely paid off
-  const monthlyInterest = Math.round((p.initialPotAmount * Math.max(0, p.potInterestRateBp)) / 10000);
-  const rounds = Math.max(1, p.remainingRounds);
-  const principalInstallment = Math.min(
-    remainingPotPrincipal,
-    Math.ceil(remainingPotPrincipal / rounds)
-  );
+  const monthlyInterest = potMonthlyInterest(p.initialPotAmount, p.potInterestRateBp);
+  const principalInstallment = Math.min(remainingPotPrincipal, p.baseContribution);
 
-  const totalMonthlyDue = p.baseContribution + principalInstallment + monthlyInterest;
+  const totalMonthlyDue = principalInstallment + monthlyInterest;
 
   return {
     remainingPotPrincipal,
     monthlyInterest,
     principalInstallment,
     totalMonthlyDue,
-    explanation: `Remaining principal: ${remainingPotPrincipal} paisa. Fixed Interest on initial pot (${p.potInterestRateBp / 100}%): ${monthlyInterest} paisa. Principal installment: ${principalInstallment} paisa. Total monthly due: ${totalMonthlyDue} paisa.`,
+    explanation: `Remaining principal: ${remainingPotPrincipal} paisa. Interest on the original pot (${p.potInterestRateBp / 100}%): ${monthlyInterest} paisa. Contribution credited to the pot: ${principalInstallment} paisa. Total monthly due: ${totalMonthlyDue} paisa.`,
   };
 }
