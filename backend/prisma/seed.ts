@@ -75,6 +75,7 @@ async function main() {
     lateFeeCap: null,
     gracePeriodDays: 3,
     continueAfterPot: true,
+    potInterestRateBp: 100,
     minBidDiscount: NPR(1_000),
     bidWinRule: 'HIGHEST_DISCOUNT',
     tieBreakRule: 'EARLIEST',
@@ -114,7 +115,7 @@ async function main() {
       referenceNumber: methodOf[m.id] === 'CASH' ? undefined : `${methodOf[m.id].slice(0, 2)}-${Math.floor(100000 + Math.random() * 899999)}`,
       receiptPath: await receipt(), paidAt: new Date(paidAt),
     }, { userId: userOf[m.id], ip: '127.0.0.1' });
-    if (verify) await ledger.verifyEntry(group.id, e.id, actor);
+    if (verify) await ledger.verifyEntry(group.id, e.id, false, actor);
     return e;
   };
   const bid = (roundId: string, m: { id: string }, npr: number, when: string) => {
@@ -146,7 +147,7 @@ async function main() {
   const fee = await ledger.createEntry(group.id, await caller(maya), {
     memberId: maya.id, roundId: r.id, type: 'LATE_FEE', amount: NPR(500), method: 'CASH', receiptPath: await receipt(), paidAt: new Date('2026-09-16T06:00:00Z'),
   }, { userId: uMaya.id, ip: '127.0.0.1' });
-  await ledger.verifyEntry(group.id, fee.id, actor);
+  await ledger.verifyEntry(group.id, fee.id, false, actor);
   // Maya disputes the date recorded; organizer dismisses with explanation
   at('2026-09-17T05:00:00Z');
   const d = await ledger.openDispute(group.id, lateMaya.id, await caller(maya), 'I gave the cash to Sita on the 12th, not the 16th.', { userId: uMaya.id, ip: '127.0.0.1' });

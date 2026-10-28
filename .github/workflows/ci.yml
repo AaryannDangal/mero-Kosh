@@ -41,6 +41,15 @@ jobs:
           JWT_SECRET: ci-only-secret-not-used-outside-tests
           APP_URL: http://localhost:5173
           CORS_ORIGINS: http://localhost:5173
+      # `npm run build` only compiles src/**, so typecheck is what catches
+      # breakage in prisma/seed.ts and the test files.
+      - run: npm run typecheck
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          JWT_SECRET: ci-only-secret-not-used-outside-tests
+          APP_URL: http://localhost:5173
+          CORS_ORIGINS: http://localhost:5173
       - run: npm run build
         working-directory: backend
         env:
