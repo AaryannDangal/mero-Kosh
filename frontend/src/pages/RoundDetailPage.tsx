@@ -400,7 +400,7 @@ function PayoutPanel({ d, onChange }: { d: RoundDetail; onChange: () => void }) 
         <div className="mb-3"><Alert>{r.winnerName} still owes {npr(winnerRow.outstanding, cur)} for this round.</Alert></div>
       )}
       <div className="grid grid-cols-2 gap-3">
-        <Field label={`${t('amount')} (${cur})`} hint={`= ${t('fullPot')} − ${t('bidDiscount')}`}><input className="input" type="number" step="0.01" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} /></Field>
+        <Field label={`${t('amount')} (${cur})`} hint={`Pot available: ${npr(r.payoutToWinner ?? r.fullPot, cur)} · enter any amount`}><input className="input" type="number" step="0.01" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} /></Field>
         <Field label={t('method')}><select className="input" value={f.method} onChange={(e) => setF({ ...f, method: e.target.value as PaymentMethod })}>{METHODS.map((m) => <option key={m} value={m}>{t(m)}</option>)}</select></Field>
       </div>
       <ErrorText error={error} />

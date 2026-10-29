@@ -445,8 +445,8 @@ export async function recordPayout(groupId: string, roundId: string, input: Payo
     if (!round.winnerMemberId || payoutToWinner == null) throw unprocessable('No pot recipient has been selected for this round yet');
     if (round.selectionMethod === 'BIDDING' && round.biddingStatus !== 'CLOSED') throw unprocessable('Close bidding before recording the payout');
     if (round.payoutEntryId) throw conflict('A payout has already been recorded for this round');
-    if (input.amount !== payoutToWinner) {
-      throw unprocessable(`Payout must equal the calculated amount ${payoutToWinner} paisa (full pot ${round.fullPot} − bid discount ${round.bidDiscount})`);
+    if (input.amount <= 0 || input.amount > payoutToWinner) {
+      throw unprocessable(`Payout amount must be between 1 and ${payoutToWinner} paisa (full pot ${round.fullPot} − bid discount ${round.bidDiscount})`);
     }
     const state = await loadGroupState(tx, groupId, now());
     const b = state.balances.get(round.winnerMemberId)!;
