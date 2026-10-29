@@ -398,7 +398,7 @@ export async function overrideWinner(
           winnerMemberId: null,
           winnerSelectedAt: null,
           selectionOverrideReason: input.reason,
-          bidDiscount: null,
+          bidDiscount: 0,
           payoutToWinner: null,
           biddingStatus: group.selectionMethod === 'BIDDING' ? 'OPEN' : round.biddingStatus,
         },
