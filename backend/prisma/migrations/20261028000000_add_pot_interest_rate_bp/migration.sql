@@ -5,4 +5,4 @@
 --   The column `groups.potInterestRateBp` does not exist in the current database.
 -- which broke group creation and every read of the groups table.
 
-ALTER TABLE "groups" ADD COLUMN "potInterestRateBp" INTEGER NOT NULL DEFAULT 100;
+ALTER TABLE "groups" ADD COLUMN IF NOT EXISTS "potInterestRateBp" INTEGER NOT NULL DEFAULT 100;
