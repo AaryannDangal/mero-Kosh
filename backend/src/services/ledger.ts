@@ -53,7 +53,6 @@ export async function createEntry(groupId: string, caller: GroupMember, input: C
       if (input.memberId !== caller.id) throw forbidden('Members can only submit payments for themselves');
       if (!MEMBER_SUBMITTABLE.includes(input.type)) throw forbidden('Members can only submit contributions, late fees and penalties');
       if (input.verify) throw forbidden('Only organizers can verify payments');
-      if (!input.receiptPath && !input.proofUrl) throw unprocessable('Please upload a receipt/screenshot or link the payment proof');
     } else if (!MANAGER_RECORDABLE.includes(input.type)) {
       throw unprocessable(`${input.type} entries are created through their dedicated workflow (payout / correction / bidding)`);
     }
@@ -92,11 +91,7 @@ export async function createEntry(groupId: string, caller: GroupMember, input: C
     if (input.type === 'MANUAL_ADJUSTMENT' && !input.notes?.trim()) throw unprocessable('A reason (notes) is required for manual adjustments');
     if (input.type !== 'MANUAL_ADJUSTMENT' && input.amount <= 0) throw unprocessable('Amount must be positive');
 
-    const hasProof = !!(input.receiptPath || input.proofUrl);
     const autoVerify = input.type === 'MANUAL_ADJUSTMENT' || (input.verify && isManager) || !!input.cashReceivedInPerson;
-    if (autoVerify && input.type !== 'MANUAL_ADJUSTMENT' && !hasProof) {
-      if (!input.cashReceivedInPerson) throw unprocessable('Upload or link payment proof, or confirm cash received in person');
-    }
     const ledgerRoundId = autoVerify ? await currentLedgerRoundId(tx, groupId) : null;
     const entry = await tx.ledgerEntry.create({
       data: {
@@ -174,10 +169,6 @@ export async function verifyEntry(groupId: string, entryId: string, cashReceived
     const entry = await tx.ledgerEntry.findFirst({ where: { id: entryId, groupId } });
     if (!entry) throw notFound('Transaction');
     if (entry.status !== 'PENDING') throw conflict(`Transaction is already ${entry.status}`);
-    if (cashReceivedInPerson && (entry.method !== 'CASH' || !['CONTRIBUTION', 'LATE_FEE', 'PENALTY'].includes(entry.type))) {
-      throw unprocessable('In-person cash confirmation is only available for cash contributions, late fees, or penalties');
-    }
-    if (!entry.receiptPath && !entry.proofUrl && !cashReceivedInPerson) throw unprocessable('Upload or link payment proof, or confirm cash received in person');
     const group = await tx.group.findUniqueOrThrow({ where: { id: groupId } });
     if (entry.type === 'CONTRIBUTION' && entry.roundId) {
       const state = await loadGroupState(tx, groupId, now());

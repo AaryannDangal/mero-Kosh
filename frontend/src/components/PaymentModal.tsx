@@ -30,17 +30,13 @@ export function PaymentModal({
     roundId: defaults?.roundId ?? rounds.find((r) => ['COLLECTING', 'PAYOUT_PENDING', 'DISPUTED'].includes(r.status))?.id ?? '',
     type: defaults?.type ?? ('CONTRIBUTION' as EntryType),
     amount: defaults?.amount ? fromPaisa(defaults.amount) : '',
-    method: 'ESEWA' as PaymentMethod,
+    method: 'CASH' as PaymentMethod,
     referenceNumber: '',
-    proofUrl: '',
     paidAt: todayIso(),
     notes: '',
-    verify: false,
-    cashReceivedInPerson: false,
   });
   const [f, setF] = useState(blank);
-  const [file, setFile] = useState<File | null>(null);
-  useEffect(() => { if (open) { setF(blank()); setFile(null); setError(null); } }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (open) { setF(blank()); setError(null); } }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (k: keyof ReturnType<typeof blank>) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setF((p) => ({ ...p, [k]: e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value }));
   const types = isManager ? MANAGER_TYPES : MEMBER_TYPES;
@@ -50,9 +46,9 @@ export function PaymentModal({
     run(async () => {
       await api.form(`/groups/${groupId}/transactions`, {
         memberId: f.memberId, roundId: f.roundId, type: f.type, amount: toPaisa(f.amount), method: f.method,
-        referenceNumber: f.referenceNumber, proofUrl: f.proofUrl, paidAt: f.paidAt, notes: f.notes,
+        referenceNumber: f.referenceNumber, paidAt: f.paidAt, notes: f.notes,
         verify: true, cashReceivedInPerson: true,
-      }, file);
+      });
       window.dispatchEvent(new Event('dhukuti:notifications'));
       onDone();
       onClose();
@@ -60,7 +56,7 @@ export function PaymentModal({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={isManager ? t('recordPayment') : t('uploadProof')}>
+    <Modal open={open} onClose={onClose} title={t('recordPayment')}>
       <form onSubmit={submit} className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           {isManager && (
