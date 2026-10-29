@@ -147,7 +147,7 @@ export const exitSchema = z.object({
 // ---------------------------------------------------------------------------
 export const bidSchema = z.object({ discountAmount: paisa });
 export const overrideSchema = z.object({
-  memberId: z.string().min(1),
+  memberId: z.preprocess((v) => (v === '' || v === null ? null : v), z.string().min(1).optional().nullable()),
   reason: trimmed(1000).min(5, 'A detailed reason is required for a manual override'),
   bidDiscount: paisa.optional(),
 });
