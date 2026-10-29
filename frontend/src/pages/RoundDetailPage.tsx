@@ -229,6 +229,7 @@ function PotAssignmentPanel({ d, onChange }: { d: RoundDetail; onChange: () => v
     setSelectedMemberId(r.winnerMemberId || '');
   }, [r.winnerMemberId]);
   const canAllocate = isManager && ['COLLECTING', 'PAYOUT_PENDING'].includes(r.status) && !r.payoutEntryId;
+  const isClearing = selectedMemberId === '';
 
   return (
     <Section title="🏆 Admin Pot Recipient Selector (ढुकुटी लिने सदस्य चयन)">
@@ -238,7 +239,7 @@ function PotAssignmentPanel({ d, onChange }: { d: RoundDetail; onChange: () => v
         </div>
       ) : (
         <p className="mb-3 text-xs text-stone-600">
-          Select the member who is taking the pot for this round from the dropdown below.
+          No pot recipient selected yet.
         </p>
       )}
 
@@ -250,7 +251,7 @@ function PotAssignmentPanel({ d, onChange }: { d: RoundDetail; onChange: () => v
               value={selectedMemberId}
               onChange={(e) => setSelectedMemberId(e.target.value)}
             >
-              <option value="">-- Choose Member --</option>
+              <option value="">-- None (no recipient) --</option>
               {d.eligibleWinners.map((w) => (
                 <option key={w.memberId} value={w.memberId}>
                   {w.fullName}
@@ -259,18 +260,21 @@ function PotAssignmentPanel({ d, onChange }: { d: RoundDetail; onChange: () => v
             </select>
           </Field>
           <button
-            className="btn-primary"
-            disabled={busy || !selectedMemberId || selectedMemberId === r.winnerMemberId}
+            className={`btn-primary ${isClearing ? 'btn-danger' : ''}`}
+            disabled={busy || selectedMemberId === r.winnerMemberId}
             onClick={() => run(async () => {
               await api.post(`/groups/${group.id}/rounds/${r.id}/winner-override`, {
-                memberId: selectedMemberId,
-                reason: 'Direct pot recipient assignment by admin',
+                memberId: selectedMemberId || null,
+                reason: isClearing ? 'Cleared pot recipient — pot given to no one' : 'Direct pot recipient assignment by admin',
               });
               onChange();
             })}
           >
-            {r.winnerMemberId ? 'Change Pot Recipient' : 'Assign Pot Recipient'}
+            {isClearing ? 'Give Pot to No One' : r.winnerMemberId ? 'Change Pot Recipient' : 'Assign Pot Recipient'}
           </button>
+          {isClearing && r.winnerName && (
+            <p className="mt-1 text-xs text-red-600">This will clear the current recipient ({r.winnerName}). No one will receive the pot for this round.</p>
+          )}
         </div>
       )}
       <ErrorText error={error} />

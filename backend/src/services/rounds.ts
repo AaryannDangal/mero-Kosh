@@ -372,7 +372,7 @@ async function applyBiddingWinner(tx: Tx, group: Group, roundId: string, winnerI
 export async function overrideWinner(
   groupId: string,
   roundId: string,
-  input: { memberId: string; reason: string; bidDiscount?: number },
+  input: { memberId: string | null; reason: string; bidDiscount?: number },
   actor: Actor,
 ) {
   return prisma.$transaction(async (tx) => {
@@ -382,6 +382,31 @@ export async function overrideWinner(
     if (!['COLLECTING', 'PAYOUT_PENDING', 'DISPUTED'].includes(round.status)) throw conflict('Winner can only be changed while the round is open');
     if (round.payoutEntryId) throw conflict('A payout is already recorded for this round. Reject the pending payout first.');
     const group = await tx.group.findUniqueOrThrow({ where: { id: groupId } });
+
+    // Clearing the pot recipient (give pot to no one)
+    if (!input.memberId) {
+      await audit(tx, {
+        groupId, userId: actor.userId, action: 'MANUAL_OVERRIDE', entityType: 'Round', entityId: roundId,
+        oldValue: { winnerMemberId: round.winnerMemberId, bidDiscount: round.bidDiscount, biddingStatus: round.biddingStatus },
+        newValue: { winnerMemberId: null, bidDiscount: null },
+        reason: input.reason,
+        ipAddress: actor.ip,
+      });
+      const cleared = await tx.round.update({
+        where: { id: roundId },
+        data: {
+          winnerMemberId: null,
+          winnerSelectedAt: null,
+          selectionOverrideReason: input.reason,
+          bidDiscount: null,
+          payoutToWinner: null,
+          biddingStatus: group.selectionMethod === 'BIDDING' ? 'OPEN' : round.biddingStatus,
+        },
+      });
+      return cleared;
+    }
+
+    // Assigning a specific member
     const state = await loadGroupState(tx, groupId, now());
     const b = state.balances.get(input.memberId);
     if (!b) throw notFound('Member');
