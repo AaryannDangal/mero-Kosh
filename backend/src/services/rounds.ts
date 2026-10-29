@@ -408,7 +408,12 @@ export async function overrideWinner(
     }
     const updated = await tx.round.update({
       where: { id: roundId },
-      data: { winnerMemberId: input.memberId, winnerSelectedAt: now(), selectionOverrideReason: input.reason },
+      data: {
+        winnerMemberId: input.memberId,
+        winnerSelectedAt: now(),
+        selectionOverrideReason: input.reason,
+        payoutToWinner: round.payoutToWinner ?? round.fullPot,
+      },
     });
     await notifyWinner(tx, group, updated, input.memberId);
     return updated;
@@ -436,11 +441,12 @@ export async function recordPayout(groupId: string, roundId: string, input: Payo
     if (!round) throw notFound('Round');
     const group = await tx.group.findUniqueOrThrow({ where: { id: groupId } });
     if (!['COLLECTING', 'PAYOUT_PENDING'].includes(round.status)) throw conflict(`Cannot record a payout while the round is ${round.status}`);
-    if (!round.winnerMemberId || round.payoutToWinner == null) throw unprocessable('No pot recipient has been selected for this round yet');
+    const payoutToWinner = round.payoutToWinner ?? (round.winnerMemberId ? round.fullPot : null);
+    if (!round.winnerMemberId || payoutToWinner == null) throw unprocessable('No pot recipient has been selected for this round yet');
     if (round.selectionMethod === 'BIDDING' && round.biddingStatus !== 'CLOSED') throw unprocessable('Close bidding before recording the payout');
     if (round.payoutEntryId) throw conflict('A payout has already been recorded for this round');
-    if (input.amount !== round.payoutToWinner) {
-      throw unprocessable(`Payout must equal the calculated amount ${round.payoutToWinner} paisa (full pot ${round.fullPot} − bid discount ${round.bidDiscount})`);
+    if (input.amount !== payoutToWinner) {
+      throw unprocessable(`Payout must equal the calculated amount ${payoutToWinner} paisa (full pot ${round.fullPot} − bid discount ${round.bidDiscount})`);
     }
     const state = await loadGroupState(tx, groupId, now());
     const b = state.balances.get(round.winnerMemberId)!;

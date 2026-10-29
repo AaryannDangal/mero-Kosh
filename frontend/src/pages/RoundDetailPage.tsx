@@ -225,6 +225,9 @@ function PotAssignmentPanel({ d, onChange }: { d: RoundDetail; onChange: () => v
   const { round: r } = d;
   const { busy, error, run } = useAction();
   const [selectedMemberId, setSelectedMemberId] = useState(r.winnerMemberId || '');
+  useEffect(() => {
+    setSelectedMemberId(r.winnerMemberId || '');
+  }, [r.winnerMemberId]);
   const canAllocate = isManager && ['COLLECTING', 'PAYOUT_PENDING'].includes(r.status) && !r.payoutEntryId;
 
   return (
