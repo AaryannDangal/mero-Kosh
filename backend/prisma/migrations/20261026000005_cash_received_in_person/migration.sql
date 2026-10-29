@@ -5,7 +5,7 @@ ALTER TABLE "ledger_entries"
   DROP CONSTRAINT "ledger_verified_requires_proof",
   ADD CONSTRAINT "ledger_verified_requires_proof" CHECK (
     "status" <> 'VERIFIED'
-    OR "type" IN ('BID_DISCOUNT','CORRECTION','MANUAL_ADJUSTMENT')
+    OR "type" IN ('BID_DISCOUNT','CORRECTION','MANUAL_ADJUSTMENT','POT_PAYOUT')
     OR "receiptPath" IS NOT NULL
     OR "proofUrl" IS NOT NULL
     OR ("cashReceivedInPerson" AND "method" = 'CASH' AND "type" IN ('CONTRIBUTION','LATE_FEE','PENALTY'))

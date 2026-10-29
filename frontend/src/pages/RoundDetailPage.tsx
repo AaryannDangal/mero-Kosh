@@ -369,7 +369,7 @@ function PayoutPanel({ d, onChange }: { d: RoundDetail; onChange: () => void }) 
   const { group, isManager } = useGroup();
   const { t } = useI18n();
   const r = d.round;
-  const [f, setF] = useState({ amount: r.payoutToWinner != null ? fromPaisa(r.payoutToWinner) : '', method: 'BANK_TRANSFER' as PaymentMethod, referenceNumber: '', paidAt: todayIso(), notes: '', proofUrl: '', verify: true });
+  const [f, setF] = useState({ amount: r.payoutToWinner != null ? fromPaisa(r.payoutToWinner) : '', method: 'CASH' as PaymentMethod });
   const { busy, error, run } = useAction();
   useEffect(() => { if (r.payoutToWinner != null) setF((p) => ({ ...p, amount: fromPaisa(r.payoutToWinner) })); }, [r.payoutToWinner]);
   const cur = group.currency;
@@ -401,14 +401,12 @@ function PayoutPanel({ d, onChange }: { d: RoundDetail; onChange: () => void }) 
       )}
       <div className="grid grid-cols-2 gap-3">
         <Field label={`${t('amount')} (${cur})`} hint={`= ${t('fullPot')} − ${t('bidDiscount')}`}><input className="input" type="number" step="0.01" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} /></Field>
-        <Field label={t('paidAt')}><input className="input" type="date" max={todayIso()} value={f.paidAt} onChange={(e) => setF({ ...f, paidAt: e.target.value })} /></Field>
         <Field label={t('method')}><select className="input" value={f.method} onChange={(e) => setF({ ...f, method: e.target.value as PaymentMethod })}>{METHODS.map((m) => <option key={m} value={m}>{t(m)}</option>)}</select></Field>
-        <Field label={t('reference')}><input className="input" value={f.referenceNumber} onChange={(e) => setF({ ...f, referenceNumber: e.target.value })} placeholder="Ref (optional)" /></Field>
       </div>
       <ErrorText error={error} />
       <button className="btn-primary mt-3 w-full" disabled={busy || !f.amount}
         onClick={() => run(async () => {
-          await api.form(`/groups/${group.id}/rounds/${r.id}/payout`, { ...f, amount: toPaisa(f.amount), verify: true });
+          await api.form(`/groups/${group.id}/rounds/${r.id}/payout`, { amount: toPaisa(f.amount), method: f.method, paidAt: todayIso(), verify: true });
           onChange();
         })}>{t('recordPayout')}</button>
       <p className="mt-2 text-center text-[11px] text-stone-500">{t('noMoneyNotice')}</p>
