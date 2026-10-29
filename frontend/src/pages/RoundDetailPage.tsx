@@ -195,7 +195,7 @@ export function RoundDetailPage() {
                         <button className="btn-secondary btn-sm" onClick={() => setPay(c.outstanding > 0
                           ? { memberId: c.memberId, roundId: r.id, type: 'CONTRIBUTION', amount: c.outstanding - (c.pending ?? 0) > 0 ? c.outstanding - (c.pending ?? 0) : undefined }
                           : { memberId: c.memberId, roundId: r.id, type: 'LATE_FEE', amount: c.lateFeeOutstanding })}>
-                          {isManager ? t('recordPayment') : t('uploadProof')}
+                          {t('recordPayment')}
                         </button>
                       )}
                       {wa && <a href={wa} target="_blank" rel="noreferrer" className="btn-secondary btn-sm ml-1">💬</a>}

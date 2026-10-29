@@ -48,13 +48,8 @@ export function LedgerPage() {
         {e.status === 'PENDING' && (isManager || own) && !e.hasReceipt && !e.proofUrl && <button className="btn-secondary btn-sm" onClick={() => setAction({ kind: 'proof', entry: e })}>📎</button>}
         {isManager && e.status === 'PENDING' && (
           <>
-            {e.method === 'CASH' && !e.hasReceipt && !e.proofUrl && ['CONTRIBUTION', 'LATE_FEE', 'PENALTY'].includes(e.type) ? (
-              <button className="btn-primary btn-sm" disabled={act.busy}
-                onClick={() => window.confirm(t('cashReceivedConfirm')) && act.run(async () => { await api.post(`/groups/${group.id}/transactions/${e.id}/verify`, { cashReceivedInPerson: true }); reloadAll(); })}>{t('confirmCashReceived')}</button>
-            ) : (e.hasReceipt || e.proofUrl) && (
-              <button className="btn-primary btn-sm" disabled={act.busy}
-                onClick={() => act.run(async () => { await api.post(`/groups/${group.id}/transactions/${e.id}/verify`, {}); reloadAll(); })}>{t('verify')}</button>
-            )}
+            <button className="btn-primary btn-sm" disabled={act.busy}
+              onClick={() => act.run(async () => { await api.post(`/groups/${group.id}/transactions/${e.id}/verify`, {}); reloadAll(); })}>{t('verify')}</button>
             <button className="btn-secondary btn-sm" onClick={() => setAction({ kind: 'reject', entry: e })}>{t('reject')}</button>
           </>
         )}
@@ -66,7 +61,7 @@ export function LedgerPage() {
 
   return (
     <div className="space-y-4">
-      <Section title={t('ledger')} action={canSubmit && <button className="btn-primary btn-sm" onClick={() => setRecording(true)}>+ {isManager ? t('recordPayment') : t('uploadProof')}</button>}>
+      <Section title={t('ledger')} action={canSubmit && <button className="btn-primary btn-sm" onClick={() => setRecording(true)}>+ {t('recordPayment')}</button>}>
         <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <select className="input" value={sp.get('memberId') ?? ''} onChange={(e) => setFilter('memberId', e.target.value)} aria-label={t('member')}>
             <option value="">{t('allMembers')}</option>

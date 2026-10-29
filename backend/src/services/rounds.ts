@@ -455,9 +455,6 @@ export async function recordPayout(groupId: string, roundId: string, input: Payo
       true,
     );
     if (reason) throw unprocessable(`Payout blocked: ${reason}`);
-    const hasProof = !!(input.receiptPath || input.proofUrl);
-    if (input.verify && !hasProof) throw unprocessable('Upload or link payment proof before verifying the payout');
-
     const entry = await tx.ledgerEntry.create({
       data: {
         groupId, roundId, memberId: round.winnerMemberId, type: 'POT_PAYOUT', amount: input.amount, method: input.method,
