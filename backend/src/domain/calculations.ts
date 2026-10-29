@@ -626,21 +626,6 @@ export interface PotObligationResult {
 }
 
 /**
- * Calculates the monthly required payment for a member who has taken/received the pot.
- *
- * The pot winner keeps paying the group's normal contribution, and that share is
- * credited against the pot they took. On top of it they pay interest on the pot:
- *
- * - remainingPotPrincipal = max(0, initialPotAmount - cumulativePrincipalRepaid - cumulativeAdvanceRepayments)
- * - monthlyInterest = round(initialPotAmount * potInterestRateBp / 10000), charged on the ORIGINAL pot
- *   and therefore unchanged until the debt is fully cleared
- * - principalInstallment = min(remainingPotPrincipal, baseContribution) — the normal share credited to the pot
- * - totalMonthlyDue = principalInstallment + monthlyInterest
- *
- * Advance repayments reduce remainingPotPrincipal immediately but do not change
- * the interest, which stays on the original pot until the whole thing is paid off.
- */
-/**
  * The monthly interest a pot winner owes. Charged on the ORIGINAL pot, so it stays
  * the same until the pot is fully repaid - a lump sum shortens the debt, not the interest.
  */

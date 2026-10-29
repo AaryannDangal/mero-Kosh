@@ -33,10 +33,19 @@ authRouter.post('/register', loginLimiter, validate(registerSchema), asyncHandle
 authRouter.post('/login', loginLimiter, validate(loginSchema), asyncHandler(async (req, res) => {
   const { identifier, password } = req.body;
   const byEmail = identifier.includes('@');
+  const rawTrimmed = identifier.trim();
   const normalizedPhone = byEmail ? null : phoneSchema.safeParse(identifier).data ?? null;
   const user = byEmail
     ? (await prisma.user.findUnique({ where: { email: identifier.toLowerCase() } }))
-    : normalizedPhone ? await prisma.user.findUnique({ where: { phone: normalizedPhone } }) : null;
+    : await prisma.user.findFirst({
+        where: {
+          OR: [
+            { phone: rawTrimmed },
+            ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
+            { phone: rawTrimmed.replace(/\s+/g, '') },
+          ],
+        },
+      });
   // constant-ish time: always run bcrypt
   const ok = await verifyPassword(password, user?.passwordHash ?? '$2a$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinv');
   if (!user || !user.passwordHash || !ok) throw unauthorized('Invalid email/phone or password');
