@@ -550,9 +550,12 @@ export async function closeRound(groupId: string, roundId: string, input: CloseR
     if (!['COLLECTING', 'PAYOUT_PENDING'].includes(round.status)) throw conflict(`Round is ${round.status} and cannot be closed`);
     const openDisputes = await tx.dispute.count({ where: { groupId, status: 'OPEN', entry: { OR: [{ roundId }, { ledgerRoundId: roundId }] } } });
     if (openDisputes) throw conflict('Resolve open disputes before closing this round');
-    if (!round.payoutEntryId) throw unprocessable('Record the pot payout before closing the round');
-    const payout = await tx.ledgerEntry.findUniqueOrThrow({ where: { id: round.payoutEntryId } });
-    if (payout.status !== 'VERIFIED') throw unprocessable('The pot payout must be verified before closing the round');
+    // When no pot recipient is selected (give pot to no one), skip payout requirement
+    if (round.winnerMemberId) {
+      if (!round.payoutEntryId) throw unprocessable('Record the pot payout before closing the round');
+      const payout = await tx.ledgerEntry.findUniqueOrThrow({ where: { id: round.payoutEntryId } });
+      if (payout.status !== 'VERIFIED') throw unprocessable('The pot payout must be verified before closing the round');
+    }
     const pendingCount = await tx.ledgerEntry.count({ where: { groupId, roundId, status: 'PENDING' } });
     if (pendingCount) throw unprocessable(`There are ${pendingCount} pending entries for this round. Verify or reject them first.`);
 
