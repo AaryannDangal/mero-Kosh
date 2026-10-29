@@ -1,0 +1,49 @@
+# Render Blueprint: API + PostgreSQL. The frontend is deployed on Vercel (see README).
+databases:
+  - name: dhukuti-db
+    # Paid persistent Postgres: Render Free databases expire after 30 days.
+    plan: basic-256mb
+    region: frankfurt
+    ipAllowList: []
+    databaseName: dhukuti
+    user: dhukuti
+
+services:
+  - type: web
+    name: dhukuti-api
+    runtime: node
+    region: frankfurt
+    rootDir: backend
+    plan: starter            # persistent disks require a paid instance
+    buildCommand: npm ci --include=dev && npm run build && npm prune --omit=dev
+    startCommand: npm run start:prod
+    healthCheckPath: /api/ready
+    disk:
+      name: uploads
+      mountPath: /var/data/uploads
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dhukuti-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: TRUST_PROXY
+        value: "1"
+      - key: CORS_ORIGINS
+        sync: false          # e.g. https://dhukuti.vercel.app
+      - key: APP_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false

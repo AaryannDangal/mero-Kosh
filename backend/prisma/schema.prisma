@@ -1,0 +1,527 @@
+// Mero Kosh - Prisma schema
+//
+// IMPORTANT: This system never holds or moves money. Every amount below is a
+// RECORD of money that members exchanged outside the app (cash, bank, eSewa,
+// Khalti...). All monetary values are stored as integer PAISA (1 NPR = 100
+// paisa) to avoid floating point errors.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum GroupRole {
+  ORGANIZER
+  CO_ORGANIZER
+  MEMBER
+  VIEWER
+}
+
+enum MemberStatus {
+  ACTIVE // joined, cycle not started yet
+  WAITING // cycle running, waiting for turn
+  RECEIVED_POT
+  EXITED
+  SUSPENDED
+  DEFAULTED
+}
+
+enum Frequency {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum SelectionMethod {
+  FIXED_ROTATION
+  BIDDING
+  ADMIN_SELECTION
+}
+
+enum LateFeeType {
+  NONE
+  FIXED // flat amount (paisa) once a payment is late
+  PERCENTAGE // basis points of the amount outstanding at the end of grace period
+  DAILY // amount (paisa) for every day late after grace period
+}
+
+enum BidWinRule {
+  HIGHEST_DISCOUNT // classic ROSCA auction: member accepting the biggest discount wins
+  LOWEST_DISCOUNT // literal "lowest bid wins"
+}
+
+enum TieBreakRule {
+  EARLIEST
+  RANDOM
+}
+
+enum GroupStatus {
+  DRAFT
+  ACTIVE
+  SETTLEMENT // all rounds closed, surplus (late fees) being distributed
+  COMPLETED
+}
+
+enum GroupJoinRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum RoundStatus {
+  UPCOMING
+  COLLECTING
+  PAYOUT_PENDING
+  COMPLETED
+  DISPUTED
+}
+
+enum BiddingStatus {
+  NOT_APPLICABLE
+  OPEN
+  CLOSED
+}
+
+enum ReconciliationStatus {
+  NOT_STARTED
+  BALANCED
+  MISMATCH
+}
+
+enum EntryType {
+  CONTRIBUTION // Contribution received
+  POT_PAYOUT // Pot payout
+  BID_DISCOUNT // Bid discount received (non-cash credit towards contribution)
+  LATE_FEE // Late fee received
+  PENALTY // Penalty received
+  REFUND // Refund issued
+  CORRECTION // Correction entry (signed delta against an earlier verified entry)
+  MANUAL_ADJUSTMENT // Manual adjustment (signed, + increases member balance)
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  ESEWA
+  KHALTI
+  OTHER
+}
+
+enum EntryStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum DisputeStatus {
+  OPEN
+  RESOLVED
+}
+
+enum DisputeOutcome {
+  UPHELD // member was right; usually accompanied by a correction entry
+  DISMISSED
+}
+
+enum NotificationType {
+  DUE_SOON
+  DUE_TODAY
+  OVERDUE
+  WINNER_SELECTED
+  PAYOUT_RECORDED
+  PAYMENT_VERIFIED
+  PAYMENT_REJECTED
+  DISPUTE_OPENED
+  DISPUTE_RESOLVED
+  GENERAL
+}
+
+enum ExitSettlement {
+  PAY_REMAINING
+  REPLACEMENT
+  REFUND_AT_CYCLE_END
+}
+
+enum AuthTokenPurpose {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+}
+
+model User {
+  id                        String         @id @default(cuid())
+  email                     String?        @unique
+  passwordHash              String?
+  googleId                  String?        @unique
+  fullName                  String
+  phone                     String?        @unique
+  preferredLanguage         String         @default("en")
+  emailVerifiedAt           DateTime?
+  emailNotificationsEnabled Boolean        @default(false)
+  tokenVersion              Int            @default(0)
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
+  memberships               GroupMember[]
+  groupJoinRequests         GroupJoinRequest[]
+  notifications             Notification[]
+  authTokens                AuthToken[]
+
+  @@map("users")
+}
+
+model AuthToken {
+  id        String           @id @default(cuid())
+  userId    String
+  tokenHash String           @unique
+  purpose   AuthTokenPurpose
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose, expiresAt])
+  @@map("auth_tokens")
+}
+
+model Group {
+  id                 String          @id @default(cuid())
+  name               String
+  description        String?
+  currency           String          @default("NPR")
+  contributionAmount Int // paisa per member per round
+  memberCount        Int // number of contributing seats == number of rounds
+  startDate          DateTime        @db.Date
+  frequency          Frequency
+  collectionDueDay   Int // MONTHLY: day of month 1-28. WEEKLY/BIWEEKLY: weekday 0(Sun)-6(Sat)
+  selectionMethod    SelectionMethod
+  lateFeeType        LateFeeType     @default(NONE)
+  lateFeeValue       Int             @default(0)
+  lateFeeCap         Int? // optional max late fee per member per round (paisa)
+  gracePeriodDays    Int             @default(0)
+  continueAfterPot   Boolean         @default(true)
+  potInterestRateBp  Int             @default(100)
+  minBidDiscount     Int             @default(0)
+  bidWinRule         BidWinRule      @default(HIGHEST_DISCOUNT)
+  tieBreakRule       TieBreakRule    @default(EARLIEST)
+  missedPaymentRules String?
+  earlyExitRules     String?
+  earlyExitPenaltyBp Int             @default(0) // basis points withheld from refunds on early exit
+  inviteCode         String          @unique
+  joinPasswordHash   String?
+  status             GroupStatus     @default(DRAFT)
+  rulesConfirmedAt   DateTime?
+  rulesConfirmedById String?
+  createdById        String
+  deletedAt          DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  members       GroupMember[]
+  rounds        Round[]
+  potRequests   PotRequest[]
+  entries       LedgerEntry[]
+  auditLogs     AuditLog[]
+  disputes      Dispute[]
+  notifications Notification[]
+  exits         MemberExit[]
+  invitations   GroupInvitation[]
+  joinRequests  GroupJoinRequest[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id                String         @id @default(cuid())
+  groupId           String
+  userId            String?
+  fullName          String
+  phone             String?
+  email             String?
+  paymentMethod     PaymentMethod?
+  paymentIdentifier String? // eSewa/Khalti ID or masked bank account. Never full card numbers.
+  bankName          String?
+  profilePhotoPath  String?
+  joinedAt          DateTime       @default(now())
+  role              GroupRole      @default(MEMBER)
+  status            MemberStatus   @default(ACTIVE)
+  isContributor     Boolean        @default(true)
+  rotationOrder     Int?
+  hasReceivedPot    Boolean        @default(false)
+  replacesMemberId  String?        @unique
+  exitedAt          DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  group       Group             @relation(fields: [groupId], references: [id])
+  user        User?             @relation(fields: [userId], references: [id])
+  replaces    GroupMember?      @relation("Replacement", fields: [replacesMemberId], references: [id])
+  replacedBy  GroupMember?      @relation("Replacement")
+  obligations RoundObligation[]
+  bids        Bid[]
+  entries     LedgerEntry[]
+  wonRounds   Round[]           @relation("RoundWinner")
+  exit        MemberExit?       @relation("ExitingMember")
+  invitations GroupInvitation[]
+  potRequests PotRequest[]
+
+  @@unique([groupId, userId])
+  @@unique([groupId, rotationOrder])
+  @@index([groupId, status])
+  @@map("group_members")
+}
+
+model GroupInvitation {
+  id           String      @id @default(cuid())
+  tokenHash    String      @unique
+  groupId      String
+  memberId     String
+  createdById  String
+  acceptedById String?
+  createdAt    DateTime    @default(now())
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  group        Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  member       GroupMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, memberId, expiresAt])
+  @@map("group_invitations")
+}
+
+model GroupJoinRequest {
+  id        String                 @id @default(cuid())
+  groupId   String
+  userId    String
+  status    GroupJoinRequestStatus @default(PENDING)
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+  group     Group                  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([groupId, status, createdAt])
+  @@map("group_join_requests")
+}
+
+model Round {
+  id                       String               @id @default(cuid())
+  groupId                  String
+  roundNumber              Int
+  periodLabel              String
+  periodStart              DateTime             @db.Date
+  periodEnd                DateTime             @db.Date
+  dueDate                  DateTime             @db.Date
+  status                   RoundStatus          @default(UPCOMING)
+  statusBeforeDispute      RoundStatus?
+  selectionMethod          SelectionMethod
+  contributorCount         Int?
+  fullPot                  Int?
+  winnerMemberId           String?
+  winnerSelectedAt         DateTime?
+  selectionOverrideReason  String?
+  biddingStatus            BiddingStatus        @default(NOT_APPLICABLE)
+  bidDiscount              Int                  @default(0)
+  payoutToWinner           Int?
+  discountRecipientCount   Int                  @default(0)
+  discountSharePerMember   Int                  @default(0) // floor share; remainder paisa go to earliest rotation members
+  expectedCollection       Int?
+  actualCollection         Int?
+  totalLateFees            Int?
+  openingBalance           Int                  @default(0)
+  calculatedClosingBalance Int?
+  actualClosingBalance     Int?
+  reconciliationStatus     ReconciliationStatus @default(NOT_STARTED)
+  reconciliationNote       String?
+  payoutEntryId            String?              @unique
+  openedAt                 DateTime?
+  closedAt                 DateTime?
+  closedById               String?
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+
+  group         Group             @relation(fields: [groupId], references: [id])
+  winner        GroupMember?      @relation("RoundWinner", fields: [winnerMemberId], references: [id])
+  obligations   RoundObligation[]
+  bids          Bid[]
+  potRequests   PotRequest[]
+  entries       LedgerEntry[]     @relation("EntryRound")
+  ledgerEntries LedgerEntry[]     @relation("EntryLedgerRound")
+
+  @@unique([groupId, roundNumber])
+  @@unique([groupId, winnerMemberId]) // a member can win at most once per cycle
+  @@map("rounds")
+}
+
+model PotRequest {
+  id        String      @id @default(cuid())
+  groupId   String
+  roundId   String
+  memberId  String
+  createdAt DateTime    @default(now())
+  group     Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  round     Round       @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  member    GroupMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, memberId])
+  @@index([groupId, roundId, createdAt])
+  @@map("pot_requests")
+}
+
+model RoundObligation {
+  id              String   @id @default(cuid())
+  roundId         String
+  memberId        String
+  contributionDue Int // gross contribution for this round (paisa)
+  discountCredit  Int      @default(0) // bid discount share credited to this member
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  round  Round       @relation(fields: [roundId], references: [id])
+  member GroupMember @relation(fields: [memberId], references: [id])
+
+  @@unique([roundId, memberId])
+  @@map("round_obligations")
+}
+
+model Bid {
+  id             String   @id @default(cuid())
+  roundId        String
+  memberId       String
+  discountAmount Int // paisa the member is willing to give up from the full pot
+  submittedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  isWinning      Boolean  @default(false)
+
+  round  Round       @relation(fields: [roundId], references: [id])
+  member GroupMember @relation(fields: [memberId], references: [id])
+
+  @@unique([roundId, memberId])
+  @@map("bids")
+}
+
+model LedgerEntry {
+  id              String        @id @default(cuid())
+  seq             Int           @unique @default(autoincrement()) // human readable transaction number
+  groupId         String
+  roundId         String? // the round this entry belongs to (obligation round)
+  ledgerRoundId   String? // the round whose cash book this entry was verified into
+  memberId        String
+  type            EntryType
+  amount          Int // paisa; >0 for all types except CORRECTION / MANUAL_ADJUSTMENT (signed, non-zero)
+  method          PaymentMethod @default(OTHER)
+  referenceNumber String?
+  receiptPath     String?
+  proofUrl        String?
+  cashReceivedInPerson Boolean @default(false)
+  paidAt          DateTime // when the money actually changed hands
+  recordedById    String
+  verifiedById    String?
+  verifiedAt      DateTime?
+  rejectedReason  String?
+  notes           String?
+  status          EntryStatus   @default(PENDING)
+  correctsEntryId String?
+  createdAt       DateTime      @default(now())
+
+  group       Group         @relation(fields: [groupId], references: [id])
+  round       Round?        @relation("EntryRound", fields: [roundId], references: [id])
+  ledgerRound Round?        @relation("EntryLedgerRound", fields: [ledgerRoundId], references: [id])
+  member      GroupMember   @relation(fields: [memberId], references: [id])
+  corrects    LedgerEntry?  @relation("Correction", fields: [correctsEntryId], references: [id])
+  corrections LedgerEntry[] @relation("Correction")
+  disputes    Dispute[]
+
+  @@index([groupId, roundId])
+  @@index([groupId, memberId])
+  @@index([groupId, status])
+  @@map("ledger_entries")
+}
+
+model Dispute {
+  id                String          @id @default(cuid())
+  groupId           String
+  entryId           String
+  raisedByUserId    String
+  reason            String
+  status            DisputeStatus   @default(OPEN)
+  outcome           DisputeOutcome?
+  resolution        String?
+  resolvedById      String?
+  resolvedAt        DateTime?
+  correctionEntryId String?
+  createdAt         DateTime        @default(now())
+
+  group Group       @relation(fields: [groupId], references: [id])
+  entry LedgerEntry @relation(fields: [entryId], references: [id])
+
+  @@index([groupId, status])
+  @@map("disputes")
+}
+
+model MemberExit {
+  id                     String         @id @default(cuid())
+  groupId                String
+  memberId               String         @unique
+  settlement             ExitSettlement
+  hadReceivedPot         Boolean
+  contributionsPaid      Int
+  potReceived            Int
+  remainingContributions Int
+  arrears                Int
+  lateFeesOwed           Int
+  penalty                Int
+  amountOwedByMember     Int
+  amountOwedToMember     Int
+  replacementMemberId    String?
+  reason                 String
+  recordedById           String
+  createdAt              DateTime       @default(now())
+
+  group  Group       @relation(fields: [groupId], references: [id])
+  member GroupMember @relation("ExitingMember", fields: [memberId], references: [id])
+
+  @@map("member_exits")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  groupId    String?
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  group Group? @relation(fields: [groupId], references: [id])
+
+  @@index([groupId, createdAt])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  groupId     String
+  userId      String?
+  memberId    String?
+  roundId     String?
+  type        NotificationType
+  title       String
+  body        String
+  dedupeKey   String?          @unique
+  emailTo     String?
+  emailSentAt DateTime?
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+
+  group Group @relation(fields: [groupId], references: [id])
+  user  User? @relation(fields: [userId], references: [id])
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
