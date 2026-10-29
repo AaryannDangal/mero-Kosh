@@ -208,8 +208,8 @@ export function computeGroupState(
 
     let potObligation = null;
     if (m.hasReceivedPot) {
-      const winRound = rounds.find((r) => r.winnerMemberId === m.id && r.payoutToWinner != null);
-      const initialPotAmount = winRound?.payoutToWinner ?? (group.contributionAmount * group.memberCount);
+      const winRound = rounds.find((r) => r.winnerMemberId === m.id);
+      const initialPotAmount = winRound?.payoutToWinner ?? winRound?.fullPot ?? (group.contributionAmount * group.memberCount);
       const monthlyInterest = potMonthlyInterest(initialPotAmount, group.potInterestRateBp ?? 100);
       // Their normal contribution in every round after the pot win is credited against the pot.
       // One month's interest is covered by the first money above the share; everything else
