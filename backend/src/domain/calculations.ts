@@ -189,12 +189,12 @@ export interface EligibilityInput {
   currentRoundUnpaid: number;
 }
 
-export function winnerIneligibilityReason(m: EligibilityInput, requireCurrentPaid: boolean): string | null {
+export function winnerIneligibilityReason(m: EligibilityInput, requireCurrentPaid: boolean, allowPreviousWinner = false): string | null {
   if (!m.isContributor) return 'Not a contributing member';
   if (m.status === 'EXITED') return 'Member has exited the group';
   if (m.status === 'SUSPENDED') return 'Member is suspended';
   if (m.status === 'DEFAULTED') return 'Member has defaulted';
-  if (m.hasReceivedPot) return 'Member already received the pot in this cycle';
+  if (m.hasReceivedPot && !allowPreviousWinner) return 'Member already received the pot in this cycle';
   if (m.arrears > 0) return 'Member has unpaid contributions (arrears)';
   if (requireCurrentPaid && m.currentRoundUnpaid > 0) return 'Member has not paid the current round contribution';
   return null;

@@ -410,15 +410,18 @@ export async function overrideWinner(
     const state = await loadGroupState(tx, groupId, now());
     const b = state.balances.get(input.memberId);
     if (!b) throw notFound('Member');
+    // Admin override allows giving pot to someone who already received it
     const reason = winnerIneligibilityReason(
       { status: b.status, isContributor: b.isContributor, hasReceivedPot: b.hasReceivedPot, arrears: arrearsBefore(b, round.roundNumber), currentRoundUnpaid: 0 },
       false,
+      true, // allowPreviousWinner: admin can assign pot to anyone
     );
     if (reason) throw unprocessable(`Selected member is not eligible: ${reason}`);
+    const payoutAmount = round.payoutToWinner ?? round.fullPot ?? (group.contributionAmount * group.memberCount);
     await audit(tx, {
       groupId, userId: actor.userId, action: 'MANUAL_OVERRIDE', entityType: 'Round', entityId: roundId,
       oldValue: { winnerMemberId: round.winnerMemberId, bidDiscount: round.bidDiscount, biddingStatus: round.biddingStatus },
-      newValue: { winnerMemberId: input.memberId, bidDiscount: input.bidDiscount ?? null },
+      newValue: { winnerMemberId: input.memberId, bidDiscount: input.bidDiscount ?? null, payoutToWinner: payoutAmount },
       reason: input.reason,
       ipAddress: actor.ip,
     });
@@ -437,7 +440,17 @@ export async function overrideWinner(
         winnerMemberId: input.memberId,
         winnerSelectedAt: now(),
         selectionOverrideReason: input.reason,
-        payoutToWinner: round.payoutToWinner ?? round.fullPot,
+        payoutToWinner: payoutAmount,
+      },
+    });
+    // Create pot obligation record for this award
+    await tx.potObligation.create({
+      data: {
+        groupId, memberId: input.memberId, roundId,
+        originalAmount: payoutAmount,
+        remainingPrincipal: payoutAmount,
+        interestRateBp: group.potInterestRateBp,
+        isCleared: false,
       },
     });
     await notifyWinner(tx, group, updated, input.memberId);
@@ -486,6 +499,16 @@ export async function recordPayout(groupId: string, roundId: string, input: Payo
         referenceNumber: input.referenceNumber, receiptPath: input.receiptPath, proofUrl: input.proofUrl, paidAt: input.paidAt,
         notes: input.notes, recordedById: actor.userId,
         ...(input.verify ? { status: 'VERIFIED' as const, verifiedById: actor.userId, verifiedAt: now(), ledgerRoundId: round.id } : {}),
+      },
+    });
+    // Create pot obligation record for this payout
+    await tx.potObligation.create({
+      data: {
+        groupId, memberId: round.winnerMemberId, roundId,
+        originalAmount: input.amount,
+        remainingPrincipal: input.amount,
+        interestRateBp: group.potInterestRateBp,
+        isCleared: false,
       },
     });
     await tx.round.update({ where: { id: roundId }, data: { payoutEntryId: entry.id, status: 'PAYOUT_PENDING' } });
@@ -630,8 +653,28 @@ export async function closeRound(groupId: string, roundId: string, input: CloseR
     if (next) {
       await openRound(tx, group, next, rec.calculatedClosingBalance, actor);
     } else {
-      await tx.group.update({ where: { id: groupId }, data: { status: 'SETTLEMENT' } });
-      await audit(tx, { groupId, userId: actor.userId, action: 'GROUP_UPDATED', entityType: 'Group', entityId: groupId, oldValue: { status: group.status }, newValue: { status: 'SETTLEMENT' }, ipAddress: actor.ip });
+      // Auto-create the next round for unlimited rounds support
+      const nextRoundNumber = round.roundNumber + 1;
+      const schedule = generateSchedule(group.startDate, group.frequency, group.collectionDueDay, nextRoundNumber);
+      const nextSchedule = schedule.find((s) => s.roundNumber === nextRoundNumber);
+      if (nextSchedule) {
+        const newRound = await tx.round.create({
+          data: {
+            groupId,
+            roundNumber: nextSchedule.roundNumber,
+            periodLabel: nextSchedule.periodLabel,
+            periodStart: nextSchedule.periodStart,
+            periodEnd: nextSchedule.periodEnd,
+            dueDate: nextSchedule.dueDate,
+            selectionMethod: group.selectionMethod,
+          },
+        });
+        await openRound(tx, group, newRound, rec.calculatedClosingBalance, actor);
+        await audit(tx, { groupId, userId: actor.userId, action: 'ROUND_CREATED', entityType: 'Group', entityId: groupId, newValue: { rounds: nextRoundNumber, autoCreated: true }, ipAddress: actor.ip });
+      } else {
+        await tx.group.update({ where: { id: groupId }, data: { status: 'SETTLEMENT' } });
+        await audit(tx, { groupId, userId: actor.userId, action: 'GROUP_UPDATED', entityType: 'Group', entityId: groupId, oldValue: { status: group.status }, newValue: { status: 'SETTLEMENT' }, ipAddress: actor.ip });
+      }
     }
     return { round: closed, reconciliation: rec, flows };
   }, TX_OPTS);

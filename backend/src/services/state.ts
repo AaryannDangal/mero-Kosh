@@ -4,7 +4,7 @@
  * contributions and the group fund balance. Everything is derived from
  * immutable ledger entries + round obligations - nothing is cached.
  */
-import type { EntryType, Group, GroupMember, LedgerEntry, MemberExit, Round, RoundObligation } from '@prisma/client';
+import type { EntryType, Group, GroupMember, LedgerEntry, MemberExit, Round, RoundObligation, PotObligation } from '@prisma/client';
 import type { Db } from '../lib/prisma';
 import {
   assessRoundLateFee,
@@ -106,12 +106,13 @@ export function effectiveType(e: EntryWithTarget): EntryType {
 export async function loadGroupState(db: Db, groupId: string, asOf: Date): Promise<GroupState> {
   const group = await db.group.findUnique({ where: { id: groupId } });
   if (!group) throw notFound('Group');
-  const [members, rounds, entries] = await Promise.all([
+  const [members, rounds, entries, potObligations] = await Promise.all([
     db.groupMember.findMany({ where: { groupId }, include: { exit: true }, orderBy: [{ rotationOrder: 'asc' }, { joinedAt: 'asc' }] }),
     db.round.findMany({ where: { groupId }, include: { obligations: true }, orderBy: { roundNumber: 'asc' } }),
     db.ledgerEntry.findMany({ where: { groupId }, include: { corrects: { select: { type: true, roundId: true } } }, orderBy: { seq: 'asc' } }),
+    db.potObligation.findMany({ where: { groupId }, orderBy: { createdAt: 'asc' } }),
   ]);
-  return computeGroupState(group, members, rounds, entries, asOf);
+  return computeGroupState(group, members, rounds, entries, potObligations, asOf);
 }
 
 export function computeGroupState(
@@ -119,6 +120,7 @@ export function computeGroupState(
   members: MemberWithExit[],
   rounds: RoundWithObligations[],
   entries: EntryWithTarget[],
+  potObligations: PotObligation[],
   asOf: Date,
 ): GroupState {
   const currentRound = rounds.find((r) => r.status === 'COLLECTING' || r.status === 'PAYOUT_PENDING' || r.status === 'DISPUTED') ?? null;
@@ -206,36 +208,75 @@ export function computeGroupState(
     else if (currentState) overall = currentState.status;
     else if (roundStates.length) overall = roundStates.every((rs) => rs.status === 'PAID') ? 'PAID' : 'PARTIAL';
 
-    let potObligation = null;
-    if (m.hasReceivedPot) {
-      const winRound = rounds.find((r) => r.winnerMemberId === m.id);
-      const initialPotAmount = winRound?.payoutToWinner ?? winRound?.fullPot ?? (group.contributionAmount * group.memberCount);
-      const monthlyInterest = potMonthlyInterest(initialPotAmount, group.potInterestRateBp ?? 100);
-      // Their normal contribution in every round after the pot win is credited against the pot.
-      // One month's interest is covered by the first money above the share; everything else
-      // clears principal, so paying more than the monthly due never loses money.
-      const cumulativePrincipalRepaid = roundStates
-        .filter((rs) => winRound ? rs.roundNumber > winRound.roundNumber : false)
-        .reduce((a, rs) => {
-          const paid = Math.max(0, rs.paid);
-          const interestCovered = Math.min(monthlyInterest, Math.max(0, paid - group.contributionAmount));
-          return a + paid - interestCovered;
-        }, 0);
+    let potObligation: any = null;
+    const allObligations = potObligations;
+    const myObligations = allObligations
+      .filter((po: PotObligation) => po.memberId === m.id)
+      .sort((a: PotObligation, b: PotObligation) => {
+        const roundA = rounds.find((r) => r.id === a.roundId)?.roundNumber ?? 0;
+        const roundB = rounds.find((r) => r.id === b.roundId)?.roundNumber ?? 0;
+        return roundA - roundB;
+      });
+
+    if (myObligations.length > 0 || m.hasReceivedPot) {
       const cumulativeAdvanceRepayments = mine
         .filter((e) => e.status === 'VERIFIED' && (e.notes?.includes('ADVANCE_POT_REPAYMENT') || e.notes?.includes('ADVANCE_POT_RETURN')))
         .reduce((a, e) => a + e.amount, 0);
 
-      const calc = calculatePotRecipientObligation({
-        baseContribution: group.contributionAmount,
-        initialPotAmount,
-        cumulativePrincipalRepaid,
-        cumulativeAdvanceRepayments,
-        potInterestRateBp: group.potInterestRateBp ?? 100,
+      // Track remaining principal per obligation
+      const tracked = myObligations.map((po) => {
+        const winRound = rounds.find((r) => r.id === po.roundId);
+        return {
+          roundNumber: winRound?.roundNumber ?? 0,
+          originalAmount: po.originalAmount,
+          remaining: po.remainingPrincipal,
+          monthlyInterest: potMonthlyInterest(po.originalAmount, po.interestRateBp),
+        };
       });
 
+      // 1. Apply advance repayments to oldest obligations first
+      let advRemaining = cumulativeAdvanceRepayments;
+      for (const t of tracked) {
+        if (advRemaining <= 0) break;
+        const deduction = Math.min(t.remaining, advRemaining);
+        t.remaining -= deduction;
+        advRemaining -= deduction;
+      }
+
+      // 2. Apply regular round contributions in order of rounds
+      let cumulativePrincipalRepaid = 0;
+      for (const rs of [...roundStates].sort((a, b) => a.roundNumber - b.roundNumber)) {
+        const activeBeforeRound = tracked.filter((t) => t.roundNumber < rs.roundNumber && t.remaining > 0);
+        if (activeBeforeRound.length === 0) continue;
+
+        const totalActiveInterest = activeBeforeRound.reduce((sum: number, t: any) => sum + t.monthlyInterest, 0);
+        const paid = Math.max(0, rs.paid);
+        const interestCovered = Math.min(totalActiveInterest, Math.max(0, paid - group.contributionAmount));
+        let principalCredit = Math.max(0, paid - interestCovered);
+        cumulativePrincipalRepaid += principalCredit;
+
+        for (const t of activeBeforeRound) {
+          if (principalCredit <= 0) break;
+          const deduction = Math.min(t.remaining, principalCredit);
+          t.remaining -= deduction;
+          principalCredit -= deduction;
+        }
+      }
+
+      const totalInitialPot = tracked.reduce((sum: number, t: any) => sum + t.originalAmount, 0);
+      const totalRemainingPrincipal = tracked.reduce((sum: number, t: any) => sum + Math.max(0, t.remaining), 0);
+      const activePots = tracked.filter((t: any) => t.remaining > 0);
+      const totalMonthlyInterest = activePots.reduce((sum: number, t: any) => sum + t.monthlyInterest, 0);
+
       potObligation = {
-        ...calc,
-        initialPotAmount,
+        remainingPotPrincipal: totalRemainingPrincipal,
+        monthlyInterest: totalMonthlyInterest,
+        principalInstallment: Math.min(totalRemainingPrincipal, group.contributionAmount),
+        totalMonthlyDue: group.contributionAmount + totalMonthlyInterest,
+        explanation: totalRemainingPrincipal <= 0
+          ? 'Pot amount fully returned. Regular monthly contribution due.'
+          : `Remaining principal: ${totalRemainingPrincipal} paisa. Interest across ${activePots.length} active pot(s): ${totalMonthlyInterest} paisa. Monthly due: ${group.contributionAmount + totalMonthlyInterest} paisa.`,
+        initialPotAmount: totalInitialPot,
         cumulativePrincipalRepaid,
         cumulativeAdvanceRepayments,
       };

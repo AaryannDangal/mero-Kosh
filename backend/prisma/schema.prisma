@@ -229,6 +229,7 @@ model Group {
   exits         MemberExit[]
   invitations   GroupInvitation[]
   joinRequests  GroupJoinRequest[]
+  potObligations PotObligation[]
 
   @@map("groups")
 }
@@ -266,6 +267,7 @@ model GroupMember {
   exit        MemberExit?       @relation("ExitingMember")
   invitations GroupInvitation[]
   potRequests PotRequest[]
+  potObligations PotObligation[]
 
   @@unique([groupId, userId])
   @@unique([groupId, rotationOrder])
@@ -348,9 +350,10 @@ model Round {
   potRequests   PotRequest[]
   entries       LedgerEntry[]     @relation("EntryRound")
   ledgerEntries LedgerEntry[]     @relation("EntryLedgerRound")
+  potObligations PotObligation[] // pot obligations awarded in this round
 
   @@unique([groupId, roundNumber])
-  @@unique([groupId, winnerMemberId]) // a member can win at most once per cycle
+  // Removed unique constraint on winnerMemberId: a member can win the pot multiple times
   @@map("rounds")
 }
 
@@ -383,6 +386,27 @@ model RoundObligation {
 
   @@unique([roundId, memberId])
   @@map("round_obligations")
+}
+
+model PotObligation {
+  id               String   @id @default(cuid())
+  groupId          String
+  memberId         String
+  roundId          String // the round where this pot was awarded
+  originalAmount   Int // the full pot amount awarded (paisa)
+  remainingPrincipal Int // remaining principal to repay (paisa)
+  interestRateBp   Int // interest rate in basis points per month
+  isCleared        Boolean @default(false)
+  clearedAt        DateTime?
+  createdAt        DateTime @default(now())
+
+  group   Group       @relation(fields: [groupId], references: [id])
+  member  GroupMember @relation(fields: [memberId], references: [id])
+  round   Round       @relation(fields: [roundId], references: [id])
+
+  @@index([groupId, memberId])
+  @@index([groupId, isCleared])
+  @@map("pot_obligations")
 }
 
 model Bid {

@@ -45,6 +45,7 @@ export interface PotObligation {
   cumulativePrincipalRepaid: number;
   cumulativeAdvanceRepayments: number;
   explanation: string;
+  pots?: { roundNumber: number; originalAmount: number; remainingPrincipal: number; monthlyInterest: number; isCleared: boolean }[];
 }
 
 export interface Balance {
