@@ -4,13 +4,13 @@ import { useGroup } from '../components/GroupLayout';
 import { useApi } from '../lib/hooks';
 import { useI18n } from '../lib/i18n';
 import { date, npr, num } from '../lib/format';
-import { Badge, Empty, ProgressBar, Spinner, Button } from '../components/ui';
+import { Badge, Empty, ProgressBar, Spinner } from '../components/ui';
 import type { Round } from '../lib/types';
 
 export function RoundsPage() {
   const { group } = useGroup();
   const { t } = useI18n();
-  const { data, refetch } = useApi<{ rounds: Round[] }>(`/groups/${group.id}/rounds`);
+  const { data } = useApi<{ rounds: Round[] }>(`/groups/${group.id}/rounds`);
   const [showAll, setShowAll] = useState(false);
   if (!data) return <Spinner />;
   if (!data.rounds.length) return <Empty>{group.status === 'DRAFT' ? 'Rounds are created when the group starts. / समूह सुरु भएपछि चरणहरू बन्छन्।' : undefined}</Empty>;
