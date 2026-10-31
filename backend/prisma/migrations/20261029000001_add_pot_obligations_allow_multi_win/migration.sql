@@ -1,12 +1,14 @@
 -- Allow a member to win the pot multiple times
--- Remove the unique constraint that prevented multiple wins per cycle
+-- Remove the unique constraint that prevented multiple wins per cycle.
+-- IF EXISTS: the constraint may already be gone on databases that were
+-- repaired manually, and a missing constraint must never block a deploy.
 ALTER TABLE "rounds"
-  DROP CONSTRAINT "rounds_groupId_winnerMemberId_key";
+  DROP CONSTRAINT IF EXISTS "rounds_groupId_winnerMemberId_key";
 
 -- Track multiple pot obligations per member
 -- Each time a member receives the pot, a new obligation is created
 -- with its own principal, interest rate, and cleared status
-CREATE TABLE "pot_obligations" (
+CREATE TABLE IF NOT EXISTS "pot_obligations" (
   "id"               TEXT       NOT NULL PRIMARY KEY,
   "groupId"          TEXT       NOT NULL,
   "memberId"         TEXT       NOT NULL,
@@ -23,5 +25,5 @@ CREATE TABLE "pot_obligations" (
   CONSTRAINT "pot_obligations_roundId_fkey" FOREIGN KEY ("roundId") REFERENCES "rounds"("id") ON DELETE CASCADE
 );
 
-CREATE INDEX "pot_obligations_groupId_memberId_idx" ON "pot_obligations"("groupId", "memberId");
-CREATE INDEX "pot_obligations_groupId_isCleared_idx" ON "pot_obligations"("groupId", "isCleared");
+CREATE INDEX IF NOT EXISTS "pot_obligations_groupId_memberId_idx" ON "pot_obligations"("groupId", "memberId");
+CREATE INDEX IF NOT EXISTS "pot_obligations_groupId_isCleared_idx" ON "pot_obligations"("groupId", "isCleared");

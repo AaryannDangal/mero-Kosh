@@ -16,7 +16,7 @@
     "test": "vitest run",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:integration": "vitest run tests/integration",
-    "start:prod": "prisma migrate deploy && node dist/index.js"
+    "start:prod": "node scripts/migrate-deploy.mjs && node dist/index.js"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
