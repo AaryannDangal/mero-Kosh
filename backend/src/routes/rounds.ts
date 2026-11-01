@@ -17,8 +17,15 @@ import { bidSchema, closeRoundSchema, overrideSchema, payoutSchema } from './sch
 export const roundsRouter = Router({ mergeParams: true });
 const MANAGER = requireRole('ORGANIZER', 'CO_ORGANIZER');
 
-roundsRouter.get('/', asyncHandler(async (req, res) => {
-  const s = await loadGroupState(prisma, req.group!.id, now());
+// Create and open the next round on demand (also repairs groups parked in
+// SETTLEMENT before round auto-creation existed).
+roundsRouter.post('/', MANAGER, asyncHandler(async (req, res) => {
+  const round = await rounds.createNextRound(req.group!.id, actorOf(req));
+  flushSoon();
+  res.status(201).json({ round });
+}));
+
+roundsRouter.get('/', asyncHandler(async (req, res) => {  const s = await loadGroupState(prisma, req.group!.id, now());
   res.json({
     rounds: s.rounds.map((r) => {
       const paid = r.obligations.reduce((a, o) => a + (s.balances.get(o.memberId)?.rounds.find((x) => x.roundId === r.id)?.paid ?? 0), 0);

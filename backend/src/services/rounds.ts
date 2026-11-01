@@ -648,34 +648,90 @@ export async function closeRound(groupId: string, roundId: string, input: CloseR
       });
     }
 
-    // open the next round with the ledger (calculated) balance carried forward
-    const next = await tx.round.findFirst({ where: { groupId, roundNumber: { gt: round.roundNumber }, status: 'UPCOMING' }, orderBy: { roundNumber: 'asc' } });
-    if (next) {
-      await openRound(tx, group, next, rec.calculatedClosingBalance, actor);
-    } else {
-      // Auto-create the next round for unlimited rounds support
-      const nextRoundNumber = round.roundNumber + 1;
-      const schedule = generateSchedule(group.startDate, group.frequency, group.collectionDueDay, nextRoundNumber);
-      const nextSchedule = schedule.find((s) => s.roundNumber === nextRoundNumber);
-      if (nextSchedule) {
-        const newRound = await tx.round.create({
-          data: {
-            groupId,
-            roundNumber: nextSchedule.roundNumber,
-            periodLabel: nextSchedule.periodLabel,
-            periodStart: nextSchedule.periodStart,
-            periodEnd: nextSchedule.periodEnd,
-            dueDate: nextSchedule.dueDate,
-            selectionMethod: group.selectionMethod,
-          },
-        });
-        await openRound(tx, group, newRound, rec.calculatedClosingBalance, actor);
-        await audit(tx, { groupId, userId: actor.userId, action: 'ROUND_CREATED', entityType: 'Group', entityId: groupId, newValue: { rounds: nextRoundNumber, autoCreated: true }, ipAddress: actor.ip });
-      } else {
-        await tx.group.update({ where: { id: groupId }, data: { status: 'SETTLEMENT' } });
-        await audit(tx, { groupId, userId: actor.userId, action: 'GROUP_UPDATED', entityType: 'Group', entityId: groupId, oldValue: { status: group.status }, newValue: { status: 'SETTLEMENT' }, ipAddress: actor.ip });
-      }
-    }
+    // Always open the next round: groups run for as long as the members keep
+    // going. Ending a group is an explicit action, never a side effect of
+    // closing a round.
+    await openNextRoundAfterClose(tx, group, round.roundNumber, rec.calculatedClosingBalance, actor);
     return { round: closed, reconciliation: rec, flows };
+  }, TX_OPTS);
+}
+
+/**
+ * Open (or create and open) the round that follows `closedRoundNumber`.
+ * Shared by closeRound and the manual "create next round" action.
+ */
+async function openNextRoundAfterClose(
+  tx: Tx,
+  group: Group,
+  closedRoundNumber: number,
+  closingBalance: number,
+  actor: Actor,
+) {
+  const upcoming = await tx.round.findFirst({
+    where: { groupId: group.id, roundNumber: { gt: closedRoundNumber }, status: 'UPCOMING' },
+    orderBy: { roundNumber: 'asc' },
+  });
+  if (upcoming) {
+    await openRound(tx, group, upcoming, closingBalance, actor);
+    return upcoming;
+  }
+
+  const nextRoundNumber = closedRoundNumber + 1;
+  const nextSchedule = generateSchedule(group.startDate, group.frequency, group.collectionDueDay, nextRoundNumber)
+    .find((s) => s.roundNumber === nextRoundNumber);
+  if (!nextSchedule) return null;
+
+  const created = await tx.round.create({
+    data: {
+      groupId: group.id,
+      roundNumber: nextSchedule.roundNumber,
+      periodLabel: nextSchedule.periodLabel,
+      periodStart: nextSchedule.periodStart,
+      periodEnd: nextSchedule.periodEnd,
+      dueDate: nextSchedule.dueDate,
+      selectionMethod: group.selectionMethod,
+    },
+  });
+  await openRound(tx, group, created, closingBalance, actor);
+  await audit(tx, {
+    groupId: group.id, userId: actor.userId, action: 'ROUND_CREATED', entityType: 'Group', entityId: group.id,
+    newValue: { rounds: nextRoundNumber, autoCreated: true }, ipAddress: actor.ip,
+  });
+  return created;
+}
+
+/**
+ * Manually create and open the next round.
+ *
+ * Used to recover groups that were parked in SETTLEMENT before round
+ * auto-creation existed, and by organisers who want to start the next round
+ * without waiting for a close.
+ */
+export async function createNextRound(groupId: string, actor: Actor) {
+  return prisma.$transaction(async (tx) => {
+    await lockGroup(tx, groupId);
+    const group = await tx.group.findUniqueOrThrow({ where: { id: groupId } });
+    if (group.status === 'DRAFT') throw conflict('Start the group before creating rounds');
+
+    const open = await tx.round.findFirst({
+      where: { groupId, status: { in: ['COLLECTING', 'PAYOUT_PENDING', 'DISPUTED'] } },
+      orderBy: { roundNumber: 'asc' },
+    });
+    if (open) throw conflict(`Round ${open.roundNumber} is still open. Close it before starting the next round.`);
+
+    const last = await tx.round.findFirst({ where: { groupId }, orderBy: { roundNumber: 'desc' } });
+    const openingBalance = last?.calculatedClosingBalance ?? last?.openingBalance ?? 0;
+
+    const opened = await openNextRoundAfterClose(tx, group, last?.roundNumber ?? 0, openingBalance, actor);
+    if (!opened) throw unprocessable('Could not compute a schedule for the next round');
+
+    if (group.status === 'SETTLEMENT' || group.status === 'COMPLETED') {
+      await tx.group.update({ where: { id: groupId }, data: { status: 'ACTIVE' } });
+      await audit(tx, {
+        groupId, userId: actor.userId, action: 'GROUP_UPDATED', entityType: 'Group', entityId: groupId,
+        oldValue: { status: group.status }, newValue: { status: 'ACTIVE' }, ipAddress: actor.ip,
+      });
+    }
+    return opened;
   }, TX_OPTS);
 }
