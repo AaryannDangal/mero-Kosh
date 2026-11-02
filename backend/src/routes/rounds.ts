@@ -75,10 +75,19 @@ roundsRouter.get('/:roundId', asyncHandler(async (req, res) => {
     }));
   const payout = r.payoutEntryId ? await prisma.ledgerEntry.findUnique({ where: { id: r.payoutEntryId } }) : null;
   const preview = r.status === 'UPCOMING' ? null : await rounds.previewReconciliation(req.group!.id, r.id);
+  // The organiser may assign the pot to the same member more than once in a
+  // cycle (unlimited rounds), so previous winners stay in the admin's list.
   const eligibleWinners = r.status === 'UPCOMING' ? [] : [...s.balances.values()].filter((b) => !winnerIneligibilityReason(
     { status: b.status, isContributor: b.isContributor, hasReceivedPot: b.hasReceivedPot, arrears: arrearsBefore(b, r.roundNumber), currentRoundUnpaid: 0 },
     false,
-  )).map((b) => ({ memberId: b.memberId, fullName: b.fullName }));
+    manager,
+  )).map((b) => ({ memberId: b.memberId, fullName: b.fullName, hasReceivedPot: b.hasReceivedPot }));
+  // Members asking for the pot themselves must still have never received it.
+  const myBalance = s.balances.get(req.membership!.id);
+  const canRequestPot = r.selectionMethod === 'ADMIN_SELECTION' && !!myBalance && !winnerIneligibilityReason(
+    { status: myBalance.status, isContributor: myBalance.isContributor, hasReceivedPot: myBalance.hasReceivedPot, arrears: arrearsBefore(myBalance, r.roundNumber), currentRoundUnpaid: 0 },
+    false,
+  );
   const limits = r.biddingStatus === 'OPEN' ? await rounds.getBidLimits(req.group!.id, r.id) : null;
   const { obligations: _o, ...round } = r;
   res.json({
@@ -90,7 +99,7 @@ roundsRouter.get('/:roundId', asyncHandler(async (req, res) => {
     eligibleWinners,
     potRequests: potRequests.map((p) => ({ memberId: p.memberId, fullName: p.member.fullName, createdAt: p.createdAt, isMe: p.memberId === req.membership!.id })),
     myPotRequest: potRequests.some((p) => p.memberId === req.membership!.id),
-    canRequestPot: r.selectionMethod === 'ADMIN_SELECTION' && eligibleWinners.some((member) => member.memberId === req.membership!.id),
+    canRequestPot,
   });
 }));
 

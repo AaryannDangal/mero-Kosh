@@ -30,6 +30,13 @@ describe('winner eligibility', () => {
     expect(winnerIneligibilityReason({ ...ok, currentRoundUnpaid: 5 }, true)).toMatch(/current round/);
     expect(winnerIneligibilityReason({ ...ok, currentRoundUnpaid: 5 }, false)).toBeNull();
   });
+  it('lets the organiser give the pot to the same member again', () => {
+    const repeat = { ...ok, hasReceivedPot: true };
+    expect(winnerIneligibilityReason(repeat, false, true)).toBeNull();
+    expect(winnerIneligibilityReason(repeat, false)).toMatch(/already/);
+    // still blocks genuinely ineligible members even with the override
+    expect(winnerIneligibilityReason({ ...repeat, status: 'SUSPENDED' }, false, true)).toMatch(/suspended/);
+  });
 });
 
 describe('early exit quote', () => {

@@ -488,9 +488,13 @@ export async function recordPayout(groupId: string, roundId: string, input: Payo
     }
     const state = await loadGroupState(tx, groupId, now());
     const b = state.balances.get(round.winnerMemberId)!;
+    // Admin-selected/overridden recipients may receive the pot more than once
+    // in a cycle; that is the whole point of unlimited rounds.
+    const allowPreviousWinner = round.selectionMethod === 'ADMIN_SELECTION' || !!round.selectionOverrideReason;
     const reason = winnerIneligibilityReason(
       { status: b.status, isContributor: b.isContributor, hasReceivedPot: b.hasReceivedPot, arrears: arrearsBefore(b, round.roundNumber), currentRoundUnpaid: currentUnpaid(b, round.id) },
       true,
+      allowPreviousWinner,
     );
     if (reason) throw unprocessable(`Payout blocked: ${reason}`);
     const entry = await tx.ledgerEntry.create({

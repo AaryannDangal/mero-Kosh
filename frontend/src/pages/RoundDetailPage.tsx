@@ -34,7 +34,7 @@ interface RoundDetail {
   };
   payout: { id: string; seq: number; amount: number; status: string; method: string; paidAt: string; referenceNumber?: string; hasReceipt: boolean } | null;
   reconciliation: Reconciliation | null;
-  eligibleWinners: { memberId: string; fullName: string }[];
+  eligibleWinners: { memberId: string; fullName: string; hasReceivedPot?: boolean }[];
   potRequests: { memberId: string; fullName: string; createdAt: string; isMe: boolean }[];
   myPotRequest: boolean;
   canRequestPot: boolean;
@@ -254,7 +254,7 @@ function PotAssignmentPanel({ d, onChange }: { d: RoundDetail; onChange: () => v
               <option value="">-- None (no recipient) --</option>
               {d.eligibleWinners.map((w) => (
                 <option key={w.memberId} value={w.memberId}>
-                  {w.fullName}
+                  {w.fullName}{w.hasReceivedPot ? ' — already received a pot / पहिले ढुकुटी पाइसकेको' : ''}
                 </option>
               ))}
             </select>
