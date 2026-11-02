@@ -14,6 +14,7 @@ export interface Group {
   continueAfterPot: boolean; potInterestRateBp: number; minBidDiscount: number; bidWinRule: 'HIGHEST_DISCOUNT' | 'LOWEST_DISCOUNT'; tieBreakRule: 'EARLIEST' | 'RANDOM';
   missedPaymentRules: string | null; earlyExitRules: string | null; earlyExitPenaltyBp: number;
   status: GroupStatus; rulesConfirmedAt: string | null; createdAt: string;
+  fundSettledAt: string | null; fundSettledById: string | null; fundSettledAmount: number | null;
   joinCode?: string; hasJoinPassword?: boolean;
 }
 

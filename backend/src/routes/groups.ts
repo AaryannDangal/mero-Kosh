@@ -194,6 +194,8 @@ g.get('/validation', asyncHandler(async (req, res) => {
   const s = await loadGroupState(prisma, req.group!.id, now());
   res.json({
     status: s.group.status,
+    fundSettledAt: s.group.fundSettledAt,
+    fundSettledAmount: s.group.fundSettledAmount,
     allRoundsClosed: s.rounds.length > 0 && s.rounds.every((r) => r.status === 'COMPLETED'),
     fundBalance: s.fundBalance,
     cycleValidation: s.cycleValidation,
@@ -209,6 +211,12 @@ g.post('/settlement', MANAGER, asyncHandler(async (req, res) => {
   const entries = await groups.createSettlement(req.group!, actorOf(req));
   flushSoon();
   res.status(201).json({ entries });
+}));
+
+g.post('/fund-settlement', MANAGER, asyncHandler(async (req, res) => {
+  const group = await groups.settleFund(req.group!, actorOf(req));
+  flushSoon();
+  res.json({ group: serializeGroup(group) });
 }));
 
 g.post('/complete', MANAGER, asyncHandler(async (req, res) => {

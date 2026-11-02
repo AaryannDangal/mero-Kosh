@@ -4,7 +4,7 @@ import { api, download } from '../lib/api';
 import { useAction, useApi } from '../lib/hooks';
 import { useI18n } from '../lib/i18n';
 import { date, npr, num } from '../lib/format';
-import { Badge, ErrorText, Section, Spinner } from '../components/ui';
+import { Alert, Badge, ErrorText, Modal, Section, Spinner } from '../components/ui';
 import { GroupedBarChart, HBarChart } from '../components/Charts';
 import { CycleCheck } from './DashboardPage';
 import type { CycleValidation, Member } from '../lib/types';
@@ -26,6 +26,7 @@ export function ReportsPage() {
   const members = useApi<{ members: Member[] }>(`/groups/${group.id}/members`);
   const settlement = useApi<Settlement>(isManager && group.status === 'SETTLEMENT' ? `/groups/${group.id}/settlement/preview` : null);
   const [stmtMember, setStmtMember] = useState(myMemberId);
+  const [settleOpen, setSettleOpen] = useState(false);
   const exp = useAction();
   const act = useAction();
   const cur = group.currency;
@@ -45,25 +46,52 @@ export function ReportsPage() {
 
   return (
     <div className="space-y-4">
-      <CycleCheck status={group.status} cv={c.cycleValidation} currency={cur} />
+      <CycleCheck status={group.status} cv={c.cycleValidation} currency={cur} settledAt={group.fundSettledAt} />
 
-      {isManager && group.status === 'SETTLEMENT' && settlement.data && (
-        <Section title={`${t('SETTLEMENT')} / ${t('completeGroup')}`}>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between"><span>{t('fundBalance')}</span><b>{npr(settlement.data.fundBalance, cur)}</b></div>
-            <div className="flex justify-between"><span>{t('PENDING')} {t('REFUND').toLowerCase()}</span><b>{npr(settlement.data.pendingRefunds, cur)}</b></div>
-            {settlement.data.distributable > 0 && (
+      {isManager && group.status !== 'DRAFT' && (
+        <Section title={t('moneySettlement')}>
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between"><span>{t('fundBalance')}</span><b>{npr(c.fundBalance, cur)}</b></div>
+            {group.fundSettledAt ? (
+              <Alert tone="green" title={t('moneySettled')}>
+                {t('moneySettledOn')} {date(group.fundSettledAt)}
+                {group.fundSettledAmount != null ? ` · ${npr(group.fundSettledAmount, cur)}` : ''}
+              </Alert>
+            ) : (
               <>
-                <p className="text-stone-600">The fund still holds late fees/penalties. Distribute them as refunds, pay out off-app, then verify each refund with proof. / बाँकी रकम फिर्ता बाँड्नुहोस्।</p>
-                <ul className="rounded-xl bg-stone-50 p-2">{settlement.data.shares.map((s) => <li key={s.memberId} className="flex justify-between"><span>{s.fullName}</span><span>{npr(s.amount, cur)}</span></li>)}</ul>
-                <button className="btn-primary" disabled={act.busy} onClick={() => act.run(async () => { await api.post(`/groups/${group.id}/settlement`); settlement.reload(); charts.reload(); })}>{t('settleCycle')}</button>
+                <p className="text-stone-600 dark:text-stone-300">{t('moneySettledExplainer')}</p>
+                {settlement.data && settlement.data.distributable > 0 && (
+                  <>
+                    <p className="text-stone-600 dark:text-stone-300">{t('fundHoldsLateFees')}</p>
+                    <ul className="rounded-xl bg-stone-50 p-2 dark:bg-stone-800">
+                      {settlement.data.shares.map((s) => (
+                        <li key={s.memberId} className="flex justify-between"><span>{s.fullName}</span><span>{npr(s.amount, cur)}</span></li>
+                      ))}
+                    </ul>
+                    <button className="btn-secondary" disabled={act.busy} onClick={() => act.run(async () => { await api.post(`/groups/${group.id}/settlement`); settlement.reload(); charts.reload(); })}>{t('settleCycle')}</button>
+                  </>
+                )}
+                <button className="btn-primary" onClick={() => setSettleOpen(true)}>{t('moneySettledButton')}</button>
               </>
             )}
-            <button className="btn-primary" disabled={act.busy || !c.cycleValidation.isZero} onClick={() => act.run(async () => { await api.post(`/groups/${group.id}/complete`); await reloadGroup(); })}>✓ {t('completeGroup')}</button>
             <ErrorText error={act.error} />
           </div>
         </Section>
       )}
+
+      <Modal open={settleOpen} onClose={() => setSettleOpen(false)} title={t('moneySettledButton')}>
+        <div className="space-y-3">
+          <p className="text-sm text-stone-600 dark:text-stone-300">{t('moneySettledConfirm')}</p>
+          <div className="flex justify-between rounded-xl bg-stone-50 p-3 text-sm dark:bg-stone-800">
+            <span>{t('fundBalance')}</span><b>{npr(c.fundBalance, cur)}</b>
+          </div>
+          <ErrorText error={act.error} />
+          <button className="btn-primary w-full" disabled={act.busy}
+            onClick={() => act.run(async () => { await api.post(`/groups/${group.id}/fund-settlement`); setSettleOpen(false); await reloadGroup(); charts.reload(); })}>
+            {t('confirm')}
+          </button>
+        </div>
+      </Modal>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Section title={t('collectionRate')}>

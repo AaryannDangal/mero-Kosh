@@ -212,6 +212,12 @@ model Group {
   inviteCode         String          @unique
   joinPasswordHash   String?
   status             GroupStatus     @default(DRAFT)
+  // Set when an organiser confirms, off-app, what happened to any money still
+  // held by the fund (year-end trip, shared out, carried forward). Recording it
+  // is enough to close the cycle; no amounts or receipts are required.
+  fundSettledAt      DateTime?
+  fundSettledById    String?
+  fundSettledAmount  Int? // fund balance (paisa) at the moment it was settled, for the record
   rulesConfirmedAt   DateTime?
   rulesConfirmedById String?
   createdById        String

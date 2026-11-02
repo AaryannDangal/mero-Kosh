@@ -21,8 +21,17 @@ interface Dashboard {
 }
 
 /** Σ net ≠ 0 is normal mid-cycle (the fund holds money). It is only an error once the cycle is over. */
-export function CycleCheck({ status, cv, currency }: { status: string; cv: CycleValidation; currency: string }) {
+export function CycleCheck({ status, cv, currency, settledAt }: { status: string; cv: CycleValidation; currency: string; settledAt?: string | null }) {
   const { t } = useI18n();
+  // The organiser may keep money in the fund on purpose (year-end trip, shared
+  // out). Once they record that decision, a non-zero balance is expected.
+  if (settledAt) {
+    return (
+      <Alert tone="green" title={t('moneySettled')}>
+        {t('moneySettledHint')}
+      </Alert>
+    );
+  }
   if (status !== 'SETTLEMENT' && status !== 'COMPLETED') return null;
   if (cv.isZero) return <Alert tone="green">{t('zeroSumOk')}</Alert>;
   return (
@@ -61,7 +70,7 @@ export function DashboardPage() {
           </ol>
         </Alert>
       )}
-      <CycleCheck status={group.status} cv={d.cycleValidation} currency={cur} />
+      <CycleCheck status={group.status} cv={d.cycleValidation} currency={cur} settledAt={group.fundSettledAt} />
 
       {/* -------- member's own dashboard -------- */}
       {isContributor && b && (

@@ -520,3 +520,63 @@ export async function completeGroup(group: Group, actor: Actor) {
     return updated;
   }, TX_OPTS);
 }
+
+/**
+ * Record that the organiser has settled whatever money is left in the fund.
+ *
+ * Groups genuinely can end holding money: the organiser takes everyone on a
+ * year-end trip paid from the fund, or divides the balance between members.
+ * That decision is made off-app, so this action deliberately takes **no input**
+ * beyond who clicked it. The app stores the decision, the fund balance at that
+ * moment (for the record), and completes the group.
+ */
+export async function settleFund(group: Group, actor: Actor) {
+  if (group.status === 'DRAFT') throw conflict('Start the group before settling its money');
+  if (group.fundSettledAt) throw conflict('The money for this group is already marked as settled');
+
+  const state = await loadGroupState(prisma, group.id, now());
+  const pending = state.entries.filter((e) => e.status === 'PENDING').length;
+  if (pending) {
+    throw unprocessable(`${pending} transaction${pending === 1 ? ' is' : 's are'} still pending verification. Verify or reject them first.`);
+  }
+  const openDisputes = await prisma.dispute.count({ where: { groupId: group.id, status: 'OPEN' } });
+  if (openDisputes) throw unprocessable('Resolve all disputes first');
+
+  const settledAt = now();
+  const settledAmount = state.fundBalance;
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.group.update({
+      where: { id: group.id },
+      data: {
+        status: 'COMPLETED',
+        fundSettledAt: settledAt,
+        fundSettledById: actor.userId,
+        fundSettledAmount: settledAmount,
+      },
+    });
+    await audit(tx, {
+      groupId: group.id,
+      userId: actor.userId,
+      action: 'GROUP_FUND_SETTLED',
+      entityType: 'Group',
+      entityId: group.id,
+      oldValue: { status: group.status, fundBalance: settledAmount },
+      newValue: {
+        status: 'COMPLETED',
+        fundSettledAmount: settledAmount,
+        // Kept for the record even though a non-zero balance is now legitimate.
+        cycleValidation: state.cycleValidation,
+      },
+      ipAddress: actor.ip,
+    });
+    await notifyMembers(tx, {
+      groupId: group.id,
+      memberIds: state.members.map((m) => m.id),
+      type: 'GENERAL',
+      title: 'Money settled / पैसा मिलाइयो',
+      body: 'The organiser has settled the group money. The cycle is now closed.',
+    });
+    return updated;
+  }, TX_OPTS);
+}

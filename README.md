@@ -151,7 +151,14 @@ Integration tests reset `TEST_DATABASE_URL` before running. The default target i
 net = contributions + late_fees + penalties + manual_adjustments − pot_received − refunds
 ```
 Bid discounts are not added (they are already reflected in the smaller cash contribution and the smaller payout). Corrections count in the category of the entry they correct.
-`Σ net (all members) = fund balance` — the money currently held by the group. **At the end of the cycle Σ net must be exactly 0**; otherwise a validation error is shown and the group cannot be completed. Late fees collected during the cycle are distributed back via the settlement step (refunds) so that Σ net reaches 0. Mid-cycle a non-zero Σ net is normal.
+`Σ net (all members) = fund balance` — the money currently held by the group. Mid-cycle a non-zero Σ net is normal.
+
+**End of cycle, two legitimate outcomes:**
+
+1. **Fund is emptied** — late fees/surplus are distributed back as refunds (the settlement step) so Σ net reaches 0.
+2. **Fund still holds money** — the organiser records **“Money is settled”**. Groups really do end holding money: a year-end trip paid from the fund, or the balance divided between members. The decision is made off-app, so the action takes no input beyond the organiser's confirmation; it stores `fundSettledAt`, `fundSettledById` and the fund balance at that moment (`fundSettledAmount`), writes an audit entry, and completes the group. **Σ net is head-checked but not forced to 0 once `fundSettledAt` is set.**
+
+`POST /groups/:id/fund-settlement` (organiser/co-organiser, no body) performs outcome 2. It refuses while transactions are pending verification or disputes are open, because those are records, not money decisions.
 
 **Round reconciliation.**
 ```
